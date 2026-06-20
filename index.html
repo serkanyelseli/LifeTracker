@@ -59,7 +59,29 @@
       <form id="entryForm">
         <div class="entry-grid">
           <div class="field-group"><label>Date</label><input type="date" id="date" required /></div>
-          <div class="field-group"><label>Prayer total</label><input type="number" id="prayTotal" step="0.1" /></div>
+
+          <div class="field-group wide prayer-widget">
+            <div class="prayer-header" id="prayerToggle">
+              <label style="margin-bottom:0">Prayer total</label>
+              <button type="button" class="prayer-toggle-btn" id="prayerToggleBtn" aria-expanded="false">
+                <span id="prayerToggleIcon">▸</span> Breakdown
+              </button>
+            </div>
+            <input type="number" id="prayTotal" step="0.1" readonly />
+            <div class="prayer-breakdown" id="prayerBreakdown" style="display:none">
+              <div class="prayer-grid">
+                <div class="field-group"><label>Sabah (S)</label><input type="number" class="pray-part" id="prayS" step="1" min="0" max="1" /></div>
+                <div class="field-group"><label>Öğle (Ö)</label><input type="number" class="pray-part" id="prayO" step="1" min="0" max="1" /></div>
+                <div class="field-group"><label>İkindi (İk)</label><input type="number" class="pray-part" id="prayIk" step="1" min="0" max="1" /></div>
+                <div class="field-group"><label>Akşam (Ak)</label><input type="number" class="pray-part" id="prayAk" step="1" min="0" max="1" /></div>
+                <div class="field-group"><label>Yatsı (Y)</label><input type="number" class="pray-part" id="prayY" step="1" min="0" max="1" /></div>
+                <div class="field-group"><label>Nafile (Nf)</label><input type="number" class="pray-part" id="prayNf" step="1" min="0" /></div>
+                <div class="field-group"><label>Tespih (T)</label><input type="number" class="pray-part" id="prayT" step="1" min="0" /></div>
+              </div>
+              <p class="prayer-hint">5 daily prayers count 0 or 1 · Nafile/Tespih can exceed 1 · these sum into Prayer total above</p>
+            </div>
+          </div>
+
           <div class="field-group"><label>Reading (pages)</label><input type="number" id="reading" step="1" /></div>
           <div class="field-group"><label>TV series</label><input type="number" id="tv" step="0.1" /></div>
 

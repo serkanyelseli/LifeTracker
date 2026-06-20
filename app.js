@@ -15,9 +15,11 @@ const STORAGE_KEY = 'serkanLifeTrackerV3';
 const SHEET_ID_KEY = 'serkanSheetId';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-const ENTRY_FIELDS = ['date','prayTotal','reading','tv','movies','teeth','workout','sleep',
+const ENTRY_FIELDS = ['date','prayTotal','prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT',
+                      'reading','tv','movies','teeth','workout','sleep',
                       'weightKg','targetKg','deltaKg','water','german','nutrition','bonusMalus',
                       'newScore','highlights'];
+const PRAYER_PARTS = ['prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
 // avgScore / newAvgScore: null means not tracked that year
@@ -186,10 +188,13 @@ function rowToEntry(row, m) {
   if (!date||!year||year<2000||year>2100||!month||month<1||month>12) return null;
   const label=String(g(row,m.date)||'');
   const type=/AVG\d{2}_\d{2}/i.test(label)?'monthly':/AVG\d{2}\b/i.test(label)?'yearly':'daily';
-  const pparts=[m.pS,m.pO,m.pIk,m.pAk,m.pY,m.pNf,m.pT].map(i=>parseNum(g(row,i))).filter(v=>v!==null);
+  const prayS=parseNum(g(row,m.pS)), prayO=parseNum(g(row,m.pO)), prayIk=parseNum(g(row,m.pIk)),
+        prayAk=parseNum(g(row,m.pAk)), prayY=parseNum(g(row,m.pY)), prayNf=parseNum(g(row,m.pNf)), prayT=parseNum(g(row,m.pT));
+  const pparts=[prayS,prayO,prayIk,prayAk,prayY,prayNf,prayT].filter(v=>v!==null);
   const prayTotal = pparts.length ? pparts.reduce((a,b)=>a+b,0) : null;
   return {
     date, year, month, day:day||1, type, label, prayTotal,
+    prayS, prayO, prayIk, prayAk, prayY, prayNf, prayT,
     reading:   parseNum(g(row,m.reading)),  tv:        parseNum(g(row,m.tv)),
     movies:    parseNum(g(row,m.movies)),   teeth:     parseNum(g(row,m.teeth)),
     workout:   parseNum(g(row,m.workout)),  sleep:     parseNum(g(row,m.sleep)),
@@ -251,19 +256,37 @@ function calcNewScore(e) {
 function getFormEntry() {
   const e = {};
   ENTRY_FIELDS.forEach(f => e[f] = document.getElementById(f)?.value ?? '');
-  ['prayTotal','reading','tv','movies','teeth','workout','sleep',
+  ['prayTotal','prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT',
+   'reading','tv','movies','teeth','workout','sleep',
    'weightKg','targetKg','deltaKg','water','german','nutrition','bonusMalus','newScore']
     .forEach(f => e[f] = parseNum(e[f]));
+  // If any prayer-part field has a value, the total is derived from the parts (source of truth).
+  const partsEntered = PRAYER_PARTS.some(f => e[f] !== null);
+  if (partsEntered) {
+    e.prayTotal = PRAYER_PARTS.reduce((sum, f) => sum + (e[f] ?? 0), 0);
+  }
   const d = new Date(e.date+'T00:00:00');
   e.year=d.getFullYear(); e.month=d.getMonth()+1; e.day=d.getDate();
   e.type='daily'; e.label='';
   return e;
+}
+function syncPrayerTotal() {
+  const parts = PRAYER_PARTS.map(f => parseNum(document.getElementById(f)?.value));
+  const anyEntered = parts.some(v => v !== null);
+  if (anyEntered) {
+    const sum = parts.reduce((s,v) => s + (v ?? 0), 0);
+    document.getElementById('prayTotal').value = sum;
+  }
+  updatePreview();
 }
 function fillForm(e) {
   ENTRY_FIELDS.forEach(f => {
     const el = document.getElementById(f);
     if (el) el.value = (e && e[f]!=null) ? e[f] : '';
   });
+  // Auto-expand the breakdown if this entry has individual prayer data
+  const hasParts = e && PRAYER_PARTS.some(f => e[f] != null);
+  setPrayerExpanded(hasParts);
   updatePreview();
 }
 function blankForm(keepDate=false) {
@@ -274,6 +297,14 @@ function blankForm(keepDate=false) {
   setStatus('Form cleared');
 }
 function setStatus(t) { document.getElementById('entryStatus').textContent = t; }
+
+function setPrayerExpanded(expanded) {
+  const panel = document.getElementById('prayerBreakdown');
+  const btn = document.getElementById('prayerToggleBtn');
+  const icon = document.getElementById('prayerToggleIcon');
+  panel.style.display = expanded ? '' : 'none';
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
 
 function updatePreview() {
   const e = getFormEntry();
@@ -710,9 +741,10 @@ function importCsvText(text) {
   renderAll();
 }
 
-const EXPORT_COLS = ['type','label','date','year','month','day','prayTotal','reading','tv','movies',
-  'teeth','workout','sleep','weightKg','targetKg','deltaKg','water','german','nutrition','bonusMalus',
-  'newScore','highlights'];
+const EXPORT_COLS = ['type','label','date','year','month','day','prayTotal',
+  'prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT',
+  'reading','tv','movies','teeth','workout','sleep','weightKg','targetKg','deltaKg','water',
+  'german','nutrition','bonusMalus','newScore','highlights'];
 
 function exportCsv() {
   const data = getData();
@@ -853,12 +885,20 @@ function renderAll(reloadSelectors=true) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('date').value = todayISO();
 
-  // Live score preview
+  // Live score preview — prayer parts get their own handler (they also update the total field)
   ENTRY_FIELDS.forEach(f => {
     const el = document.getElementById(f);
-    if (el) el.addEventListener('input', updatePreview);
+    if (!el) return;
+    if (PRAYER_PARTS.includes(f)) el.addEventListener('input', syncPrayerTotal);
+    else el.addEventListener('input', updatePreview);
   });
   document.getElementById('date').addEventListener('change', loadSelectedDate);
+
+  // Prayer breakdown toggle
+  document.getElementById('prayerToggleBtn').addEventListener('click', () => {
+    const expanded = document.getElementById('prayerToggleBtn').getAttribute('aria-expanded') === 'true';
+    setPrayerExpanded(!expanded);
+  });
 
   // Entry form
   document.getElementById('entryForm').addEventListener('submit', saveEntry);
