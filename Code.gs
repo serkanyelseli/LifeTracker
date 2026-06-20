@@ -61,6 +61,16 @@ function doPost(e) {
       return jsonResponse_({ ok: true, written: (body.rows || []).length });
     }
 
+    if (body.mode === 'appendBatch') {
+      // Appends rows after whatever is currently in the sheet (used for chunked pushes)
+      if (body.rows && body.rows.length) {
+        const values = body.rows.map(r => HEADERS.map(h => r[h] ?? ''));
+        const startRow = sheet.getLastRow() + 1;
+        sheet.getRange(startRow, 1, values.length, HEADERS.length).setValues(values);
+      }
+      return jsonResponse_({ ok: true, written: (body.rows || []).length });
+    }
+
     if (body.mode === 'append') {
       const row = HEADERS.map(h => body.entry[h] ?? '');
       // Check if a row with same type+date+label already exists — if so, update it instead of duplicating

@@ -736,24 +736,34 @@ function download(blob, name) {
 /* ════════════════════════════════════════════
    GOOGLE SHEETS  (via Google Apps Script web app)
 ════════════════════════════════════════════ */
-async function appsScriptCall(method, body) {
-  const url = getSheetId(); // now stores the Apps Script /exec URL
+async function appsScriptCall(method, body, timeoutMs = 25000) {
+  const url = getSheetId(); // stores the Apps Script /exec URL
   if (!url) { toast('No Script URL configured','err'); return null; }
   updateSyncStatus('syncing');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const opts = { method };
+    const opts = { method, signal: controller.signal };
     if (method === 'POST') {
       opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' }; // avoids CORS preflight on Apps Script
       opts.body = JSON.stringify(body);
     }
     const resp = await fetch(url, opts);
+    clearTimeout(timer);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Unknown script error');
     updateSyncStatus('ok');
     return data;
   } catch (e) {
+    clearTimeout(timer);
     updateSyncStatus('error');
-    toast('Sheets error: ' + e.message, 'err');
+    const reason = e.name === 'AbortError'
+      ? `Timed out after ${timeoutMs/1000}s — payload may be too large, try a smaller batch`
+      : e.message;
+    toast('Sheets error: ' + reason, 'err', 6000);
+    const log = document.getElementById('sheetsLog');
+    if (log) log.textContent = '✗ Error: ' + reason;
     return null;
   }
 }
@@ -791,9 +801,22 @@ async function pushAllToSheets() {
   const data = getData();
   if (!data.length) return toast('No data to push', 'err');
   const log = document.getElementById('sheetsLog');
-  log.textContent = `Pushing ${data.length} rows…`;
-  const resp = await appsScriptCall('POST', { mode: 'replaceAll', rows: data });
-  if (resp) { log.textContent = `✓ Pushed ${resp.written ?? data.length} rows.`; toast('All data pushed', 'ok'); }
+  const CHUNK = 150;
+  const chunks = [];
+  for (let i = 0; i < data.length; i += CHUNK) chunks.push(data.slice(i, i + CHUNK));
+
+  log.textContent = `Pushing ${data.length} rows in ${chunks.length} batch(es)…`;
+  // First chunk replaces everything in the sheet; subsequent chunks append.
+  let totalWritten = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const mode = i === 0 ? 'replaceAll' : 'appendBatch';
+    log.textContent = `Pushing batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
+    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 30000);
+    if (!resp) { log.textContent = `✗ Failed at batch ${i+1}/${chunks.length}. ${totalWritten} rows written so far.`; return; }
+    totalWritten += resp.written ?? chunks[i].length;
+  }
+  log.textContent = `✓ Pushed ${totalWritten} rows in ${chunks.length} batch(es).`;
+  toast('All data pushed', 'ok');
 }
 
 function updateSheetUI() {
