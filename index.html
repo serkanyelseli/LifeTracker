@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Serkan Life Tracker V3</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<header class="app-header">
+  <div class="header-brand">
+    <h1>Serkan Life Tracker</h1>
+    <span class="version-badge">V3.0</span>
+    <div class="sync-status" id="syncStatus">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncLabel">Not connected</span>
+    </div>
+  </div>
+  <nav>
+    <button class="nav-btn active" data-view="entry">Daily Entry</button>
+    <button class="nav-btn" data-view="dashboard">Dashboard</button>
+    <button class="nav-btn" data-view="history">History</button>
+    <button class="nav-btn" data-view="import">Import / Export</button>
+    <button class="nav-btn" data-view="sheets">Google Sheets</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ── DAILY ENTRY ── -->
+  <section id="entry" class="view active">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="panel-title">Daily Entry</div>
+          <p style="font-size:12px;color:var(--muted)">Select a date — existing entries load automatically.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="entry-status" id="entryStatus">Ready</span>
+          <button class="btn btn-sheets" id="pushToSheets" style="display:none">↑ Push to Sheets</button>
+        </div>
+      </div>
+      <form id="entryForm">
+        <div class="entry-grid">
+          <div class="field-group"><label>Date</label><input type="date" id="date" required /></div>
+          <div class="field-group"><label>Prayer total</label><input type="number" id="prayTotal" step="0.1" /></div>
+          <div class="field-group"><label>Reading (pages)</label><input type="number" id="reading" step="1" /></div>
+          <div class="field-group"><label>TV series</label><input type="number" id="tv" step="0.1" /></div>
+
+          <div class="field-group"><label>Movies</label><input type="number" id="movies" step="0.1" /></div>
+          <div class="field-group"><label>Teeth (times)</label><input type="number" id="teeth" step="1" /></div>
+          <div class="field-group"><label>Workout (min)</label><input type="number" id="workout" step="1" /></div>
+          <div class="field-group"><label>Sleep (h)</label><input type="number" id="sleep" step="0.1" /></div>
+
+          <div class="field-group"><label>Weight (kg)</label><input type="number" id="weightKg" step="0.1" /></div>
+          <div class="field-group"><label>Target (kg)</label><input type="number" id="targetKg" step="0.1" /></div>
+          <div class="field-group"><label>Delta (kg)</label><input type="number" id="deltaKg" step="0.1" /></div>
+          <div class="field-group"><label>Water (L)</label><input type="number" id="water" step="0.1" /></div>
+
+          <div class="field-group"><label>German (min)</label><input type="number" id="german" step="1" /></div>
+          <div class="field-group">
+            <label>Nutrition</label>
+            <select id="nutrition">
+              <option value="">—</option>
+              <option value="1">Clean &amp; Intentional (+1)</option>
+              <option value="0.5">Mostly Healthy (+0.5)</option>
+              <option value="0">Normal (0)</option>
+              <option value="-0.5">Junk (−0.5)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label>Bonus / Malus</label>
+            <select id="bonusMalus">
+              <option value="">—</option>
+              <option value="1">Exceptional Day (+1)</option>
+              <option value="0">Normal (0)</option>
+              <option value="-0.5">Inefficient (−0.5)</option>
+            </select>
+          </div>
+          <div class="field-group"><label>Stored New Score</label><input type="number" id="newScore" step="0.1" /></div>
+
+          <div class="field-group wide"><label>Daily Highlights</label>
+            <textarea id="highlights" placeholder="[WORK] ...&#10;[HLT] ...&#10;[STAR] ..."></textarea>
+          </div>
+
+          <div class="wide score-bar">
+            <div class="score-item">
+              <span class="score-label">Stored New Score</span>
+              <span class="score-val" id="storedNewScore">—</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">Calculated New Score</span>
+              <span class="score-val" id="calcNewScore">—</span>
+            </div>
+            <div class="score-item" style="flex:1">
+              <span class="score-label">Breakdown</span>
+              <span style="font-size:11px;color:var(--muted);font-family:var(--mono);line-height:1.8" id="scoreBreakdown">—</span>
+            </div>
+          </div>
+
+          <div class="wide actions">
+            <button type="submit" class="btn btn-primary">Save Day</button>
+            <button type="button" id="loadDate" class="btn btn-secondary">Load Date</button>
+            <button type="button" id="blankForm" class="btn btn-secondary">Clear Form</button>
+            <button type="button" id="deleteDay" class="btn btn-danger">Delete Day</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── DASHBOARD ── -->
+  <section id="dashboard" class="view">
+    <div class="panel dash-controls">
+      <div class="field-group"><label>Year</label><select id="yearSelect"></select></div>
+      <div class="field-group"><label>Compare with</label><select id="compareYearSelect"></select></div>
+      <div class="field-group">
+        <label>Metric</label>
+        <select id="metricSelect">
+          <option value="newScore">New Score</option>
+          <option value="score">Score (old)</option>
+          <option value="prayTotal">Prayer total</option>
+          <option value="tvMovies">TV + Movies</option>
+          <option value="reading">Reading</option>
+          <option value="sleep">Sleep</option>
+          <option value="workout">Workout</option>
+          <option value="weightKg">Weight</option>
+          <option value="water">Water</option>
+          <option value="german">German</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Month</label>
+        <select id="monthSelect">
+          <option value="">All year</option>
+          <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+          <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+          <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+          <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
+        </select>
+      </div>
+    </div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="finance-grid" id="finKpiGrid"></div>
+    <div class="chart-grid">
+      <div class="panel"><div class="panel-title">Monthly comparison</div><div class="chart-wrap"><canvas id="monthlyChart"></canvas></div></div>
+      <div class="panel"><div class="panel-title">Historical trend — all years</div><div class="chart-wrap"><canvas id="yearChart"></canvas></div></div>
+    </div>
+    <div class="chart-grid">
+      <div class="panel"><div class="panel-title">Income vs Expenses (k€) — all years</div><div class="chart-wrap"><canvas id="finIncExpChart"></canvas></div></div>
+      <div class="panel"><div class="panel-title" id="finMonthlyTitle">Monthly income &amp; expenses (k€)</div><div class="chart-wrap"><canvas id="finMonthlyChart"></canvas></div></div>
+    </div>
+  </section>
+
+  <!-- ── HISTORY ── -->
+  <section id="history" class="view">
+    <div class="panel">
+      <div class="history-controls">
+        <div class="panel-title" style="margin-bottom:0">History</div>
+        <input class="search-input" id="historySearch" placeholder="Search date, score, [STAR]…" />
+        <select id="historyTypeFilter" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font:13px var(--sans);padding:7px 10px;">
+          <option value="">All types</option>
+          <option value="daily">Daily</option>
+          <option value="monthly">Monthly AVG</option>
+          <option value="yearly">Yearly AVG</option>
+        </select>
+        <span id="historyCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+      </div>
+      <div style="overflow-x:auto"><table id="historyTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ── IMPORT / EXPORT ── -->
+  <section id="import" class="view">
+    <div class="panel">
+      <div class="panel-title">Import CSV</div>
+      <div class="import-zone" id="importZone">
+        <div style="font-size:28px">📂</div>
+        <strong style="font-size:14px">Drop your Overall CSV here</strong>
+        <p>or click to choose file · semicolon or comma · European decimal OK</p>
+        <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none" />
+      </div>
+      <div class="import-log" id="importInfo">No import yet.</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Export</div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="exportCsv">Export backup CSV</button>
+        <button class="btn btn-secondary" id="exportJson">Export JSON backup</button>
+        <button class="btn btn-danger" id="clearAll">Clear all app data</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">
+        Header row: Wk, Date, Day, Month, Year · Sub-header: S/Ö/İk/Ak/Y/Nf/T and Read, TvS, Mov, Tth, WO, Sleep, Wg/KG, Tgt, Delta/∆kg, Wat, Ger, Nut, B/M · Score, New Score. Monthly (AVG08_01) and yearly (AVG08) rows supported.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── GOOGLE SHEETS ── -->
+  <section id="sheets" class="view">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+        <div><div class="panel-title">Google Sheets Integration</div>
+        <p style="font-size:12px;color:var(--muted)">Read history from Sheets and push new daily entries — log from any device.</p></div>
+        <span id="sheetConnectionBadge" class="disconnected-pill">● Not configured</span>
+      </div>
+      <div>
+        <div class="sheets-step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Create a Google Sheet with a "Log" tab</div>
+            <div class="step-desc">The app will auto-create headers on first push. Or manually set the first row to: <code>type;label;date;year;month;day;prayTotal;reading;tv;movies;teeth;workout;sleep;weightKg;targetKg;deltaKg;water;german;nutrition;bonusMalus;newScore;highlights</code></div>
+          </div>
+        </div>
+        <div class="sheets-step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Copy your Sheet ID from the URL</div>
+            <div class="step-desc"><code>docs.google.com/spreadsheets/d/<strong>SHEET_ID</strong>/edit</code></div>
+          </div>
+        </div>
+        <div class="sheets-step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Paste Sheet ID and save</div>
+            <div class="sheets-id-row">
+              <input class="sheets-id-input" id="sheetIdInput" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
+              <button class="btn btn-primary" id="saveSheetId">Save</button>
+            </div>
+          </div>
+        </div>
+        <div class="sheets-step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Push / Pull data</div>
+            <div class="actions" style="margin-top:8px">
+              <button class="btn btn-sheets" id="pullFromSheets">↓ Pull from Sheets</button>
+              <button class="btn btn-secondary" id="pushAllToSheets">↑ Push all local data</button>
+            </div>
+            <div class="import-log" id="sheetsLog" style="margin-top:12px">No Sheets activity yet.</div>
+          </div>
+        </div>
+        <div class="sheets-step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">iPhone logging via Google Forms</div>
+            <div class="step-desc">Create a Google Form linked to your Sheet. One question per habit. Bookmark the Form URL in Safari → Share → Add to Home Screen. One-tap daily logging from anywhere — the app picks it up next Pull.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+<script src="app.js"></script>
+</body>
+</html>
