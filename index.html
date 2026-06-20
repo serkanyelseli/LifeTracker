@@ -205,7 +205,7 @@
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px">
         <div><div class="panel-title">Google Sheets Integration</div>
-        <p style="font-size:12px;color:var(--muted)">Read history from Sheets and push new daily entries — log from any device.</p></div>
+        <p style="font-size:12px;color:var(--muted)">Read history from Sheets and push new daily entries — log from any device, works fully outside Claude.ai too.</p></div>
         <span id="sheetConnectionBadge" class="disconnected-pill">● Not configured</span>
       </div>
       <div>
@@ -213,22 +213,22 @@
           <div class="step-num">1</div>
           <div class="step-body">
             <div class="step-title">Create a Google Sheet with a "Log" tab</div>
-            <div class="step-desc">The app will auto-create headers on first push. Or manually set the first row to: <code>type;label;date;year;month;day;prayTotal;reading;tv;movies;teeth;workout;sleep;weightKg;targetKg;deltaKg;water;german;nutrition;bonusMalus;newScore;highlights</code></div>
+            <div class="step-desc">The connector script auto-creates the header row on first use. No manual setup needed in the Sheet itself.</div>
           </div>
         </div>
         <div class="sheets-step">
           <div class="step-num">2</div>
           <div class="step-body">
-            <div class="step-title">Copy your Sheet ID from the URL</div>
-            <div class="step-desc"><code>docs.google.com/spreadsheets/d/<strong>SHEET_ID</strong>/edit</code></div>
+            <div class="step-title">Deploy the connector script</div>
+            <div class="step-desc">In your Sheet: <strong>Extensions → Apps Script</strong>, paste the provided <code>Code.gs</code> script, save, then <strong>Deploy → New deployment → Web app</strong>. Set "Execute as: Me" and "Who has access: Anyone". Copy the resulting <code>.../exec</code> URL.</div>
           </div>
         </div>
         <div class="sheets-step">
           <div class="step-num">3</div>
           <div class="step-body">
-            <div class="step-title">Paste Sheet ID and save</div>
+            <div class="step-title">Paste the Script URL and save</div>
             <div class="sheets-id-row">
-              <input class="sheets-id-input" id="sheetIdInput" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
+              <input class="sheets-id-input" id="sheetIdInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec" />
               <button class="btn btn-primary" id="saveSheetId">Save</button>
             </div>
           </div>
@@ -247,8 +247,8 @@
         <div class="sheets-step">
           <div class="step-num">5</div>
           <div class="step-body">
-            <div class="step-title">iPhone logging via Google Forms</div>
-            <div class="step-desc">Create a Google Form linked to your Sheet. One question per habit. Bookmark the Form URL in Safari → Share → Add to Home Screen. One-tap daily logging from anywhere — the app picks it up next Pull.</div>
+            <div class="step-title">Daily workflow</div>
+            <div class="step-desc">Save a day in Daily Entry → tap <strong>↑ Push to Sheets</strong>. On a different device, open this tab and tap <strong>↓ Pull from Sheets</strong> to merge in the latest data.</div>
           </div>
         </div>
       </div>

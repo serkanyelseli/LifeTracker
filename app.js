@@ -91,7 +91,7 @@ function updateSyncStatus(state) {
   const lbl = document.getElementById('syncLabel');
   dot.className = 'sync-dot ' + (state || '');
   const labels = {ok:'Sheets connected', syncing:'Syncing…', error:'Sheets error'};
-  lbl.textContent = labels[state] || (getSheetId() ? 'Sheet ID set' : 'Not connected');
+  lbl.textContent = labels[state] || (getSheetId() ? 'Script URL set' : 'Not connected');
 }
 
 /* ════════════════════════════════════════════
@@ -734,77 +734,66 @@ function download(blob, name) {
 }
 
 /* ════════════════════════════════════════════
-   GOOGLE SHEETS
+   GOOGLE SHEETS  (via Google Apps Script web app)
 ════════════════════════════════════════════ */
-async function sheetsCall(prompt) {
-  const id = getSheetId();
-  if (!id) { toast('No Sheet ID configured','err'); return null; }
+async function appsScriptCall(method, body) {
+  const url = getSheetId(); // now stores the Apps Script /exec URL
+  if (!url) { toast('No Script URL configured','err'); return null; }
   updateSyncStatus('syncing');
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:1000,
-        mcp_servers:[{type:'url',url:'https://drivemcp.googleapis.com/mcp/v1',name:'gdrive'}],
-        messages:[{role:'user',content:prompt}]
-      })
-    });
+    const opts = { method };
+    if (method === 'POST') {
+      opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' }; // avoids CORS preflight on Apps Script
+      opts.body = JSON.stringify(body);
+    }
+    const resp = await fetch(url, opts);
     const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Unknown script error');
     updateSyncStatus('ok');
     return data;
-  } catch(e) {
+  } catch (e) {
     updateSyncStatus('error');
-    toast('Sheets error: '+e.message,'err');
+    toast('Sheets error: ' + e.message, 'err');
     return null;
   }
 }
 
 async function pushEntryToSheets(entry) {
-  const row = EXPORT_COLS.map(c=>entry[c]??'');
-  await sheetsCall(
-    `Append one row to Google Sheet ID "${getSheetId()}", tab "Log". ` +
-    `If tab missing, create it with header: ${EXPORT_COLS.join(',')}. ` +
-    `Row data: ${JSON.stringify(row)}. Reply only "ok".`
-  );
-  toast('Pushed to Sheets ✓','ok');
+  const resp = await appsScriptCall('POST', { mode: 'append', entry });
+  if (resp) toast('Pushed to Sheets ✓', 'ok');
 }
 
 async function pullFromSheets() {
   const log = document.getElementById('sheetsLog');
   log.textContent = 'Pulling from Sheets…';
-  const resp = await sheetsCall(
-    `Read all rows from Google Sheet ID "${getSheetId()}", tab "Log". ` +
-    `Skip header row. Return ONLY a JSON array of objects keyed by the headers. No markdown.`
-  );
-  if (!resp) { log.textContent='Pull failed.'; return; }
+  const resp = await appsScriptCall('GET');
+  if (!resp) { log.textContent = 'Pull failed.'; return; }
   try {
-    const txt = resp.content?.filter(c=>c.type==='text').map(c=>c.text).join('')||'[]';
-    const rows = JSON.parse(txt.replace(/```json|```/g,'').trim());
-    const key = e=>`${e.type}|${e.date}|${e.label||''}`;
+    const rows = (resp.rows || []).map(r => {
+      ['prayTotal','reading','tv','movies','teeth','workout','sleep','weightKg','targetKg',
+       'deltaKg','water','german','nutrition','bonusMalus','newScore','year','month','day']
+        .forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
+      return r;
+    });
+    const key = e => `${e.type}|${e.date}|${e.label||''}`;
     const by = new Map();
-    getData().forEach(e=>by.set(key(e),e));
-    rows.forEach(e=>{ if(e.date) by.set(key(e),e); });
-    const all = [...by.values()].sort((a,b)=>(a.date+a.type).localeCompare(b.date+b.type));
+    getData().forEach(e => by.set(key(e), e));
+    rows.forEach(e => { if (e.date) by.set(key(e), e); });
+    const all = [...by.values()].sort((a,b) => (a.date+a.type).localeCompare(b.date+b.type));
     setData(all);
     log.textContent = `✓ Pulled ${rows.length} rows. Total: ${all.length}.`;
-    toast(`Pulled ${rows.length} rows`,'ok');
+    toast(`Pulled ${rows.length} rows`, 'ok');
     renderAll();
-  } catch(e) { log.textContent='Parse error: '+e.message; toast('Could not parse response','err'); }
+  } catch (e) { log.textContent = 'Parse error: ' + e.message; toast('Could not parse response', 'err'); }
 }
 
 async function pushAllToSheets() {
   const data = getData();
-  if (!data.length) return toast('No data to push','err');
+  if (!data.length) return toast('No data to push', 'err');
   const log = document.getElementById('sheetsLog');
   log.textContent = `Pushing ${data.length} rows…`;
-  const rows = data.map(e=>EXPORT_COLS.map(c=>e[c]??''));
-  const resp = await sheetsCall(
-    `Replace all data in Google Sheet ID "${getSheetId()}", tab "Log" (create if missing). ` +
-    `First row headers: ${EXPORT_COLS.join(',')}. Data: ${JSON.stringify(rows)}. Reply only "ok".`
-  );
-  if (resp) { log.textContent=`✓ Pushed ${data.length} rows.`; toast('All data pushed','ok'); }
+  const resp = await appsScriptCall('POST', { mode: 'replaceAll', rows: data });
+  if (resp) { log.textContent = `✓ Pushed ${resp.written ?? data.length} rows.`; toast('All data pushed', 'ok'); }
 }
 
 function updateSheetUI() {
@@ -911,7 +900,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const id = document.getElementById('sheetIdInput').value.trim();
     setSheetId(id);
     updateSheetUI();
-    toast(id?'Sheet ID saved':'Sheet ID cleared', id?'ok':'info');
+    toast(id?'Script URL saved':'Script URL cleared', id?'ok':'info');
   });
   document.getElementById('pullFromSheets').addEventListener('click', pullFromSheets);
   document.getElementById('pushAllToSheets').addEventListener('click', pushAllToSheets);
