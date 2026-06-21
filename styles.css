@@ -64,6 +64,24 @@ main { padding:20px 24px; max-width:1400px; margin:0 auto; }
 .field-group textarea { min-height:80px; resize:vertical; font-size:13px; }
 .wide { grid-column:1/-1; }
 
+/* ── Prayer breakdown widget ── */
+.prayer-widget { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:12px 14px; }
+.prayer-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.prayer-toggle-btn { display:inline-flex; align-items:center; gap:5px; background:none; border:none; color:var(--accent); font:500 12px var(--sans); cursor:pointer; padding:2px 4px; }
+.prayer-toggle-btn:hover { text-decoration:underline; }
+#prayerToggleIcon { display:inline-block; transition:transform 0.15s; font-size:10px; }
+.prayer-toggle-btn[aria-expanded="true"] #prayerToggleIcon { transform:rotate(90deg); }
+.prayer-widget input#prayTotal { background:var(--surface3); cursor:default; font-weight:600; color:var(--accent); }
+.prayer-breakdown { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+.prayer-grid { display:grid; grid-template-columns:repeat(4,minmax(80px,1fr)); gap:10px; }
+.prayer-grid .field-group label { font-size:10px; }
+.prayer-grid input { padding:7px 9px; font-size:13px; text-align:center; }
+.prayer-hint { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.5; }
+.cluster-label { font-size:11px; font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:6px; }
+@media (max-width:768px) { .prayer-grid { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:480px) { .prayer-grid { grid-template-columns:repeat(2,1fr); } }
+
+
 .score-bar { display:flex; gap:16px; align-items:center; flex-wrap:wrap; padding:14px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); }
 .score-item { display:flex; flex-direction:column; gap:2px; }
 .score-item .score-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; }
