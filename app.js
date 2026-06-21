@@ -538,6 +538,7 @@ function switchView(v) {
   document.getElementById(v).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   if (v==='dashboard') renderDashboard();
+  else if (v==='finDashboard') renderFinDashboard();
   else if (v==='history') renderHistory();
 }
 
@@ -728,7 +729,6 @@ function renderKpis() {
 function renderDashboard() {
   ensureYearSelectors();
   renderKpis();
-  renderFinKpis();
 
   const metric = document.getElementById('metricSelect').value;
   const y  = document.getElementById('yearSelect').value;
@@ -755,16 +755,19 @@ function renderDashboard() {
   destroyChart('yearly');
   const yy = yearlyValues(metric);
   charts['yearly'] = new Chart(document.getElementById('yearChart'), chartDefaults(yy.labels, [lineSeries(metric, yy.values, C.blue, {fill:true})], {decimals}));
-
-  renderFinCharts();
 }
 
 /* ════════════════════════════════════════════
-   FINANCE TAB
+   FINANCE DASHBOARD (separate tab/nav, own filters)
 ════════════════════════════════════════════ */
 /* Aggregates live finance entries (seeded + real) into one row per year.
    Real monthly 'daily-fin' entries take priority; falls back to a seeded
-   'yearly' row for years with no real monthly data at all. */
+   'yearly' row for years with no real monthly data at all. Includes DE
+   category sums and TR Mom/Others split for the dedicated charts. */
+function sumField(rows, k) {
+  const vals = rows.map(d=>d[k]).filter(v=>v!=null);
+  return vals.length ? vals.reduce((a,b)=>a+b,0) : null;
+}
 function finYearlyAggregate() {
   const data = getFinData();
   const years = [...new Set(data.map(d => d.year).filter(Boolean))].sort((a,b)=>a-b);
@@ -772,11 +775,25 @@ function finYearlyAggregate() {
     const monthly = data.filter(d => d.year===y && d.type==='daily-fin');
     const seededYear = data.find(d => d.year===y && d.type==='yearly');
     if (monthly.length) {
-      const sum = (k) => { const vals = monthly.map(d=>d[k]).filter(v=>v!=null); return vals.length ? vals.reduce((a,b)=>a+b,0) : null; };
-      return { y, income: sum('income'), expDE: sum('expDE'), tr: sum('expTR') };
+      const row = { y, income: sumField(monthly,'income'), expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR') };
+      EXP_DE_PARTS.forEach(c => row[c] = sumField(monthly, c));
+      const momSum = sumField(monthly, 'trMomVarious');
+      const othersSum = sumField(monthly, 'trOthersVarious');
+      // Mom/Others totals also include the named sub-fields if present (real entries, not just estimates)
+      const momExtra = TR_MOM_PARTS.filter(f=>f!=='trMomVarious').reduce((s,f)=>{ const v=sumField(monthly,f); return v!=null ? s+v : s; }, 0);
+      const othersExtra = TR_OTHERS_PARTS.filter(f=>f!=='trOthersVarious').reduce((s,f)=>{ const v=sumField(monthly,f); return v!=null ? s+v : s; }, 0);
+      row.trMom = (momSum ?? 0) + momExtra || null;
+      row.trOthers = (othersSum ?? 0) + othersExtra || null;
+      return row;
     }
-    if (seededYear) return { y, income: seededYear.income, expDE: seededYear.expDE, tr: seededYear.expTR };
-    return { y, income: null, expDE: null, tr: null };
+    if (seededYear) {
+      const row = { y, income: seededYear.income, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null };
+      EXP_DE_PARTS.forEach(c => row[c] = null);
+      return row;
+    }
+    const row = { y, income: null, expDE: null, tr: null, trMom: null, trOthers: null };
+    EXP_DE_PARTS.forEach(c => row[c] = null);
+    return row;
   });
 }
 function finDataForYear(y) { return finYearlyAggregate().find(f => f.y === Number(y)) || null; }
@@ -786,20 +803,56 @@ function finMonthlyForYear(y) {
   return Array.from({length:12}, (_,i) => {
     const m = i+1;
     const real = data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='daily-fin');
-    if (real) return { m, income: real.income, expDE: real.expDE, tr: real.expTR };
-    const seeded = data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='monthly');
-    if (seeded) return { m, income: seeded.income, expDE: seeded.expDE, tr: seeded.expTR };
-    return { m, income: null, expDE: null, tr: null };
+    const seeded = !real ? data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='monthly') : null;
+    const src = real || seeded;
+    if (!src) {
+      const row = { m, income: null, expDE: null, tr: null, trMom: null, trOthers: null };
+      EXP_DE_PARTS.forEach(c => row[c] = null);
+      return row;
+    }
+    const row = { m, income: src.income, expDE: src.expDE, tr: src.expTR };
+    EXP_DE_PARTS.forEach(c => row[c] = src[c] ?? null);
+    const momExtra = TR_MOM_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
+    const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
+    row.trMom = momExtra || null;
+    row.trOthers = othersExtra || null;
+    return row;
   });
 }
 
-function renderFinKpis() {
-  const y  = document.getElementById('yearSelect').value;
-  const cy = document.getElementById('compareYearSelect').value;
+/* ── Finance Dashboard selectors (independent from the habit Dashboard's) ── */
+function ensureFinDashSelectors() {
+  const ys = finYearlyAggregate().map(f => f.y).sort((a,b)=>b-a);
+  if (!ys.length) return;
+  ['finDashYearSelect','finDashCompareSelect'].forEach((id,idx) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const old = sel.value;
+    sel.innerHTML = '';
+    ys.forEach(y => { const o=document.createElement('option'); o.value=y; o.textContent=y; sel.appendChild(o); });
+    if (old && ys.includes(Number(old))) sel.value=old;
+    else sel.value = ys[0]; // both default to most recent year — single-year view
+  });
+}
+
+const DE_CAT_LABELS = {
+  expHousehold:'Household', expSeko:'Seko', expCiko:'Çiko', expYaz:'Yaz', expPotisko:'Potişko',
+  expTransport:'Transport', expGrocery:'Grocery', expEatOut:'Eat Out', expOthers:'Others'
+};
+const DE_CAT_COLORS = ['#0ea5e9','#f59e0b','#22c55e','#a78bfa','#ef4444','#14b8a6','#fb923c','#ec4899','#94a3b8'];
+
+function renderFinDashKpis() {
+  const y  = document.getElementById('finDashYearSelect').value;
+  const cy = document.getElementById('finDashCompareSelect').value;
   const compareActive = !!cy && cy !== y;
   const a  = finDataForYear(y);
   const b  = compareActive ? finDataForYear(cy) : null;
-  if (!a) { document.getElementById('finKpiGrid').innerHTML=''; return; }
+  if (!a) { document.getElementById('finDashKpiGrid').innerHTML=''; return; }
+
+  const netA = (a.income!=null && a.expDE!=null && a.tr!=null) ? a.income - a.expDE - a.tr : null;
+  const netB = (b && b.income!=null && b.expDE!=null && b.tr!=null) ? b.income - b.expDE - b.tr : null;
+  const savingsA = (a.income) ? (netA!=null ? (netA/a.income*100) : null) : null;
+  const savingsB = (b && b.income) ? (netB!=null ? (netB/b.income*100) : null) : null;
 
   function finCard(title, valA, valB, unit='k€', lowerBetter=false, decimals=2) {
     const v = valA!=null ? fmt(valA, decimals)+' '+unit : '—';
@@ -818,23 +871,21 @@ function renderFinKpis() {
     </div>`;
   }
 
-  document.getElementById('finKpiGrid').innerHTML =
-    finCard('Income',          a.income, b?.income, 'k€', false) +
-    finCard('Expenses DE',     a.expDE,  b?.expDE,  'k€', true)  +
-    finCard('TR Payments',     a.tr,     b?.tr,      'k€', true);
+  document.getElementById('finDashKpiGrid').innerHTML =
+    finCard('Income',           a.income, b?.income, 'k€', false) +
+    finCard('Expenses DE',      a.expDE,  b?.expDE,  'k€', true)  +
+    finCard('TR Payments',      a.tr,     b?.tr,      'k€', true)  +
+    finCard('Net Cashflow',     netA,     netB,       'k€', false) +
+    finCard('Savings Rate',     savingsA, savingsB,   '%',  false, 1);
 }
 
-function renderFinCharts() {
-  const yearly = finYearlyAggregate();
-  if (!yearly.length) {
-    destroyChart('finIncExp'); destroyChart('finMonthly');
-    return;
-  }
-  const yLabels = yearly.map(f => String(f.y));
+function renderFinDashCharts() {
+  const y  = document.getElementById('finDashYearSelect').value;
+  const cy = document.getElementById('finDashCompareSelect').value;
+  const view = document.getElementById('finDashViewSelect').value; // 'monthly' | 'yearly'
+  const compareActive = !!cy && cy !== y;
 
-  // Income vs Expenses — all years
-  destroyChart('finIncExp');
-  const incExpOptions = {
+  const barOptions = {
     responsive:true, maintainAspectRatio:true,
     layout:{padding:{top:16}},
     interaction:{mode:'index',intersect:false},
@@ -850,39 +901,101 @@ function renderFinCharts() {
       y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
     }
   };
-  charts['finIncExp'] = new Chart(document.getElementById('finIncExpChart'), {
+
+  let labels, incomeSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
+
+  if (view === 'yearly') {
+    const yearly = finYearlyAggregate();
+    labels = yearly.map(f => String(f.y));
+    incomeSeries = yearly.map(f => f.income);
+    expDESeries  = yearly.map(f => f.expDE);
+    trSeries     = yearly.map(f => f.tr);
+    deCatRows    = yearly;
+    trMomSeries    = yearly.map(f => f.trMom);
+    trOthersSeries = yearly.map(f => f.trOthers);
+    document.getElementById('finDashIncExpTitle').textContent = 'Income vs Expenses (k€) — all years';
+    document.getElementById('finDashNetTitle').textContent = 'Net cashflow (k€) — all years';
+    document.getElementById('finDashDECatTitle').textContent = 'Expenses DE — category totals, all years';
+    document.getElementById('finDashTRTitle').textContent = 'TR Payments — Mom vs Others, all years';
+  } else {
+    const monthly = finMonthlyForYear(y);
+    labels = MONTHS;
+    incomeSeries = monthly.map(m => m.income);
+    expDESeries  = monthly.map(m => m.expDE);
+    trSeries     = monthly.map(m => m.tr);
+    deCatRows    = monthly;
+    trMomSeries    = monthly.map(m => m.trMom);
+    trOthersSeries = monthly.map(m => m.trOthers);
+    document.getElementById('finDashIncExpTitle').textContent = `Income vs Expenses (k€) — ${y}`;
+    document.getElementById('finDashNetTitle').textContent = `Net cashflow (k€) — ${y}`;
+    document.getElementById('finDashDECatTitle').textContent = `Expenses DE — category breakdown, ${y}`;
+    document.getElementById('finDashTRTitle').textContent = `TR Payments — Mom vs Others, ${y}`;
+  }
+
+  // ── Chart 1: Income vs Expenses ──
+  destroyChart('finDashIncExp');
+  const incExpDatasets = [
+    { ...barSeries('Income k€', incomeSeries, C.green) },
+    { ...barSeries('Expenses DE k€', expDESeries, C.red) },
+    { ...barSeries('TR Payments k€', trSeries, C.yellow) },
+  ];
+  if (view === 'monthly' && compareActive) {
+    const cyMonthly = finMonthlyForYear(cy);
+    incExpDatasets.push({ ...barSeries(`Income k€ (${cy})`, cyMonthly.map(m=>m.income), C.green+'80') });
+  }
+  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions });
+
+  // ── Chart 2: Net cashflow ──
+  destroyChart('finDashNet');
+  const netSeries = labels.map((_, i) => {
+    const inc = incomeSeries[i], de = expDESeries[i], tr = trSeries[i];
+    return (inc!=null && de!=null && tr!=null) ? round3(inc - de - tr) : null;
+  });
+  const netColors = netSeries.map(v => v==null ? '#444' : v>=0 ? C.green : C.red);
+  charts['finDashNet'] = new Chart(document.getElementById('finDashNetChart'), {
     type:'bar',
-    data:{
-      labels: yLabels,
-      datasets:[
-        { ...barSeries('Income k€',      yearly.map(f=>f.income), C.green)  },
-        { ...barSeries('Expenses DE k€', yearly.map(f=>f.expDE),  C.red)    },
-        { ...barSeries('TR Payments k€', yearly.map(f=>f.tr),     C.yellow) },
-      ]
-    },
-    options: incExpOptions,
+    data:{ labels, datasets:[{ label:'Net k€', data:netSeries, backgroundColor:netColors.map(c=>c+'cc'), borderRadius:4, borderSkipped:false }] },
+    options: { ...barOptions, plugins:{ ...barOptions.plugins, legend:{display:false} } }
   });
 
-  // Monthly breakdown for the currently-selected dashboard year
-  destroyChart('finMonthly');
-  const selectedYear = document.getElementById('yearSelect').value || yearly[yearly.length-1].y;
-  const monthly = finMonthlyForYear(selectedYear);
-  document.getElementById('finMonthlyTitle').textContent = `${selectedYear} — Monthly income & expenses (k€)`;
-  charts['finMonthly'] = new Chart(document.getElementById('finMonthlyChart'), {
+  // ── Chart 3: DE category breakdown (stacked bar) ──
+  destroyChart('finDashDECat');
+  const deCatDatasets = EXP_DE_PARTS.map((cat, i) => ({
+    type:'bar', label: DE_CAT_LABELS[cat],
+    data: deCatRows.map(r => r[cat]),
+    backgroundColor: DE_CAT_COLORS[i]+'cc',
+    borderRadius: 2, borderSkipped:false,
+  }));
+  charts['finDashDECat'] = new Chart(document.getElementById('finDashDECatChart'), {
+    type:'bar',
+    data:{ labels, datasets: deCatDatasets },
+    options: {
+      ...barOptions,
+      plugins: { ...barOptions.plugins, datalabels: { display:false } }, // too cluttered stacked
+      scales: { x:{ ...barOptions.scales.x, stacked:true }, y:{ ...barOptions.scales.y, stacked:true } }
+    }
+  });
+
+  // ── Chart 4: TR Mom vs Others ──
+  destroyChart('finDashTR');
+  charts['finDashTR'] = new Chart(document.getElementById('finDashTRChart'), {
     type:'bar',
     data:{
-      labels: MONTHS,
+      labels,
       datasets:[
-        { ...barSeries('Income k€',      monthly.map(m=>m.income), C.green)  },
-        { ...barSeries('Expenses DE k€', monthly.map(m=>m.expDE),  C.red)    },
-        { ...barSeries('TR Payments k€', monthly.map(m=>m.tr),     C.yellow) },
+        { ...barSeries('Mom k€', trMomSeries, C.blue) },
+        { ...barSeries('Others k€', trOthersSeries, C.purple) },
       ]
     },
-    options: incExpOptions,
+    options: barOptions
   });
 }
 
-// Finance rendering is now part of renderDashboard() above.
+function renderFinDashboard() {
+  ensureFinDashSelectors();
+  renderFinDashKpis();
+  renderFinDashCharts();
+}
 
 /* ════════════════════════════════════════════
    HISTORY
@@ -954,6 +1067,47 @@ function importCsvText(text) {
   renderAll();
 }
 
+/* ── Finance CSV import — expects a clean header row matching FIN_EXPORT_COLS,
+   semicolon-separated. This is the format produced by exportFinCsv() below,
+   and also what Claude generates when processing a source spreadsheet. ── */
+const FIN_NUMERIC_COLS = ['year','monthNum','income','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+
+function importFinCsvText(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) { document.getElementById('finImportInfo').textContent = 'Import failed: empty file.'; return; }
+  const header = rows[0].map(h => String(h).trim());
+  const monthIdx = header.indexOf('month');
+  const typeIdx = header.indexOf('type');
+  if (monthIdx < 0) { document.getElementById('finImportInfo').textContent = 'Import failed: no "month" column found in header row.'; return; }
+
+  const entries = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[monthIdx]) continue; // skip blank rows
+    const e = {};
+    header.forEach((h, idx) => {
+      let v = row[idx];
+      if (v === '' || v === undefined) { e[h] = null; return; }
+      if (FIN_NUMERIC_COLS.includes(h)) { e[h] = parseNum(v); }
+      else { e[h] = v; }
+    });
+    if (!e.type) e.type = 'daily-fin';
+    entries.push(e);
+  }
+
+  const key = e => `${e.type}|${e.month}`;
+  const by = new Map();
+  getFinData().forEach(e => by.set(key(e), e));
+  entries.forEach(e => { if (e.month) by.set(key(e), e); });
+  const all = [...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month)));
+  setFinData(all);
+
+  document.getElementById('finImportInfo').textContent =
+    `✓ Imported ${entries.length} finance rows. Total stored: ${all.length}.`;
+  toast(`Imported ${entries.length} finance rows`, 'ok');
+  renderAll();
+}
+
 const EXPORT_COLS = ['type','label','date','year','month','day','prayTotal',
   'prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT',
   'reading','tv','movies','teeth','workout','sleep','weightKg','targetKg','deltaKg','water',
@@ -968,10 +1122,20 @@ function exportCsv() {
   download(new Blob([csv],{type:'text/csv;charset=utf-8'}), `serkan-lt-v3-${todayISO()}.csv`);
   toast('CSV exported','ok');
 }
+function exportFinCsv() {
+  const data = getFinData();
+  if (!data.length) return toast('No finance data to export','err');
+  const csv = [FIN_EXPORT_COLS.join(';'),
+    ...data.map(r=>FIN_EXPORT_COLS.map(c=>`"${String(r[c]??'').replaceAll('"','""')}"`).join(';'))
+  ].join('\n');
+  download(new Blob([csv],{type:'text/csv;charset=utf-8'}), `serkan-lt-finance-${todayISO()}.csv`);
+  toast('Finance CSV exported','ok');
+}
 function exportJson() {
   const data = getData();
-  if (!data.length) return toast('No data to export','err');
-  download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}), `serkan-lt-v3-${todayISO()}.json`);
+  const finData = getFinData();
+  if (!data.length && !finData.length) return toast('No data to export','err');
+  download(new Blob([JSON.stringify({log:data, finance:finData},null,2)],{type:'application/json'}), `serkan-lt-v3-${todayISO()}.json`);
   toast('JSON exported','ok');
 }
 function download(blob, name) {
@@ -1142,6 +1306,7 @@ function renderAll(reloadSelectors=true) {
   if (reloadSelectors) { ensureYearSelectors(); }
   const activeView = document.querySelector('.view.active')?.id;
   if (activeView==='dashboard') renderDashboard();
+  else if (activeView==='finDashboard') renderFinDashboard();
   else if (activeView==='history') renderHistory();
   updateSheetUI();
 }
@@ -1215,7 +1380,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) el.addEventListener('change', () => renderDashboard());
   });
 
-  // (Finance KPIs/charts now driven by the Dashboard's year/compare selectors above.)
+  // Finance Dashboard controls (separate tab, own selectors)
+  ['finDashYearSelect','finDashCompareSelect','finDashViewSelect'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => renderFinDashboard());
+  });
 
   // History
   document.getElementById('historySearch').addEventListener('input', renderHistory);
@@ -1242,12 +1411,35 @@ document.addEventListener('DOMContentLoaded', () => {
     r.readAsText(f,'UTF-8');
   });
 
+  // Finance Import — click + drag & drop
+  const finImportZone = document.getElementById('finImportZone');
+  const finCsvFile = document.getElementById('finCsvFile');
+  finImportZone.addEventListener('click', () => finCsvFile.click());
+  finCsvFile.addEventListener('change', () => {
+    const f = finCsvFile.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => importFinCsvText(e.target.result);
+    r.readAsText(f,'UTF-8');
+  });
+  finImportZone.addEventListener('dragover', e => { e.preventDefault(); finImportZone.classList.add('drag-over'); });
+  finImportZone.addEventListener('dragleave', () => finImportZone.classList.remove('drag-over'));
+  finImportZone.addEventListener('drop', e => {
+    e.preventDefault(); finImportZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => importFinCsvText(ev.target.result);
+    r.readAsText(f,'UTF-8');
+  });
+
   // Export / clear
   document.getElementById('exportCsv').addEventListener('click', exportCsv);
+  document.getElementById('exportFinCsv').addEventListener('click', exportFinCsv);
   document.getElementById('exportJson').addEventListener('click', exportJson);
   document.getElementById('clearAll').addEventListener('click', () => {
-    if (!confirm('Clear ALL app data from this browser?')) return;
+    if (!confirm('Clear ALL app data from this browser (Log + Finance)?')) return;
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(FIN_STORAGE_KEY);
+    localStorage.removeItem('serkanFinanceSeeded_v2');
     toast('App data cleared','err');
     renderAll();
   });

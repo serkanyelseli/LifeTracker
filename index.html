@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=11" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V3.0 · build 9</span>
+    <span class="version-badge">V3.0 · build 11</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -36,6 +36,7 @@
     <button class="nav-btn active" data-view="entry">Daily Entry</button>
     <button class="nav-btn" data-view="finEntry">Finance Entry</button>
     <button class="nav-btn" data-view="dashboard">Dashboard</button>
+    <button class="nav-btn" data-view="finDashboard">Finance Dashboard</button>
     <button class="nav-btn" data-view="history">History</button>
     <button class="nav-btn" data-view="import">Import / Export</button>
     <button class="nav-btn" data-view="sheets">Google Sheets</button>
@@ -272,14 +273,48 @@
       </div>
     </div>
     <div class="kpi-grid" id="kpiGrid"></div>
-    <div class="finance-grid" id="finKpiGrid"></div>
     <div class="chart-grid">
       <div class="panel"><div class="panel-title">Monthly comparison</div><div class="chart-wrap"><canvas id="monthlyChart"></canvas></div></div>
       <div class="panel"><div class="panel-title">Historical trend — all years</div><div class="chart-wrap"><canvas id="yearChart"></canvas></div></div>
     </div>
+  </section>
+
+  <!-- ── FINANCE DASHBOARD ── -->
+  <section id="finDashboard" class="view">
+    <div class="panel dash-controls">
+      <div class="field-group"><label>Year</label><select id="finDashYearSelect"></select></div>
+      <div class="field-group"><label>Compare with</label><select id="finDashCompareSelect"></select></div>
+      <div class="field-group">
+        <label>View</label>
+        <select id="finDashViewSelect">
+          <option value="monthly">Monthly (selected year)</option>
+          <option value="yearly">Yearly (all years)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="finance-grid" id="finDashKpiGrid"></div>
+
     <div class="chart-grid">
-      <div class="panel"><div class="panel-title">Income vs Expenses (k€) — all years</div><div class="chart-wrap"><canvas id="finIncExpChart"></canvas></div></div>
-      <div class="panel"><div class="panel-title" id="finMonthlyTitle">Monthly income &amp; expenses (k€)</div><div class="chart-wrap"><canvas id="finMonthlyChart"></canvas></div></div>
+      <div class="panel">
+        <div class="panel-title" id="finDashIncExpTitle">Income vs Expenses (k€)</div>
+        <div class="chart-wrap"><canvas id="finDashIncExpChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" id="finDashNetTitle">Net cashflow (k€)</div>
+        <div class="chart-wrap"><canvas id="finDashNetChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="panel">
+        <div class="panel-title" id="finDashDECatTitle">Expenses DE — category breakdown</div>
+        <div class="chart-wrap"><canvas id="finDashDECatChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" id="finDashTRTitle">TR Payments — Mom vs Others</div>
+        <div class="chart-wrap"><canvas id="finDashTRChart"></canvas></div>
+      </div>
     </div>
   </section>
 
@@ -304,7 +339,7 @@
   <!-- ── IMPORT / EXPORT ── -->
   <section id="import" class="view">
     <div class="panel">
-      <div class="panel-title">Import CSV</div>
+      <div class="panel-title">Import CSV — Daily Log</div>
       <div class="import-zone" id="importZone">
         <div style="font-size:28px">📂</div>
         <strong style="font-size:14px">Drop your Overall CSV here</strong>
@@ -314,10 +349,21 @@
       <div class="import-log" id="importInfo">No import yet.</div>
     </div>
     <div class="panel">
+      <div class="panel-title">Import CSV — Finance</div>
+      <div class="import-zone" id="finImportZone">
+        <div style="font-size:28px">💶</div>
+        <strong style="font-size:14px">Drop your Finance CSV here</strong>
+        <p>or click to choose file · semicolon-separated · expects: type;month;year;monthNum;income;expDE;expTR;... (matching Finance Entry fields)</p>
+        <input type="file" id="finCsvFile" accept=".csv,text/csv" style="display:none" />
+      </div>
+      <div class="import-log" id="finImportInfo">No import yet.</div>
+    </div>
+    <div class="panel">
       <div class="panel-title">Export</div>
       <div class="actions">
-        <button class="btn btn-secondary" id="exportCsv">Export backup CSV</button>
-        <button class="btn btn-secondary" id="exportJson">Export JSON backup</button>
+        <button class="btn btn-secondary" id="exportCsv">Export Log backup CSV</button>
+        <button class="btn btn-secondary" id="exportFinCsv">Export Finance backup CSV</button>
+        <button class="btn btn-secondary" id="exportJson">Export full JSON backup</button>
         <button class="btn btn-danger" id="clearAll">Clear all app data</button>
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:12px">
@@ -393,6 +439,6 @@
   </section>
 
 </main>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
