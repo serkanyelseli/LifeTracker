@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -34,6 +34,7 @@
   </div>
   <nav>
     <button class="nav-btn active" data-view="entry">Daily Entry</button>
+    <button class="nav-btn" data-view="finEntry">Finance Entry</button>
     <button class="nav-btn" data-view="dashboard">Dashboard</button>
     <button class="nav-btn" data-view="history">History</button>
     <button class="nav-btn" data-view="import">Import / Export</button>
@@ -141,6 +142,98 @@
             <button type="button" id="loadDate" class="btn btn-secondary">Load Date</button>
             <button type="button" id="blankForm" class="btn btn-secondary">Clear Form</button>
             <button type="button" id="deleteDay" class="btn btn-danger">Delete Day</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── FINANCE ENTRY ── -->
+  <section id="finEntry" class="view">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="panel-title">Finance Entry</div>
+          <p style="font-size:12px;color:var(--muted)">One entry per month. Select a month — existing entries load automatically.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="entry-status" id="finEntryStatus">Ready</span>
+          <button class="btn btn-sheets" id="pushFinToSheets" style="display:none">↑ Push to Sheets</button>
+        </div>
+      </div>
+
+      <form id="finEntryForm">
+        <div class="entry-grid">
+          <div class="field-group"><label>Month</label><input type="month" id="finMonth" required /></div>
+          <div class="field-group"><label>Income (k€)</label><input type="number" id="finIncome" step="0.001" /></div>
+
+          <!-- Expenses DE breakdown -->
+          <div class="field-group wide prayer-widget">
+            <div class="prayer-header" id="expDEToggle">
+              <label style="margin-bottom:0">Expenses DE total (k€)</label>
+              <button type="button" class="prayer-toggle-btn" id="expDEToggleBtn" aria-expanded="false">
+                <span id="expDEToggleIcon">▸</span> Breakdown
+              </button>
+            </div>
+            <input type="number" id="finExpDE" step="0.001" readonly />
+            <div class="prayer-breakdown" id="expDEBreakdown" style="display:none">
+              <div class="prayer-grid">
+                <div class="field-group"><label>Household</label><input type="number" class="expde-part" id="expHousehold" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Seko</label><input type="number" class="expde-part" id="expSeko" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Çiko</label><input type="number" class="expde-part" id="expCiko" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Yaz</label><input type="number" class="expde-part" id="expYaz" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Potişko</label><input type="number" class="expde-part" id="expPotisko" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Transport</label><input type="number" class="expde-part" id="expTransport" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Grocery</label><input type="number" class="expde-part" id="expGrocery" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Eat Out</label><input type="number" class="expde-part" id="expEatOut" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Others</label><input type="number" class="expde-part" id="expOthers" step="0.001" min="0" /></div>
+              </div>
+              <p class="prayer-hint">All amounts in k€ (thousands of euros) · these sum into Expenses DE total above</p>
+            </div>
+          </div>
+
+          <!-- Expenses TR breakdown — two clusters: Mom (Bursa house) + Others -->
+          <div class="field-group wide prayer-widget">
+            <div class="prayer-header" id="expTRToggle">
+              <label style="margin-bottom:0">TR Payments total (k€)</label>
+              <button type="button" class="prayer-toggle-btn" id="expTRToggleBtn" aria-expanded="false">
+                <span id="expTRToggleIcon">▸</span> Breakdown
+              </button>
+            </div>
+            <input type="number" id="finExpTR" step="0.001" readonly />
+            <div class="prayer-breakdown" id="expTRBreakdown" style="display:none">
+
+              <p class="cluster-label">Mom (Bursa house)</p>
+              <div class="prayer-grid">
+                <div class="field-group"><label>Aidat</label><input type="number" class="exptr-part" id="trAidat" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Elektrik</label><input type="number" class="exptr-part" id="trElektrik" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Su</label><input type="number" class="exptr-part" id="trSu" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Doğalgaz</label><input type="number" class="exptr-part" id="trDogalgaz" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Internet</label><input type="number" class="exptr-part" id="trInternet" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Various</label><input type="number" class="exptr-part" id="trMomVarious" step="0.001" min="0" /></div>
+              </div>
+
+              <p class="cluster-label" style="margin-top:14px">Others</p>
+              <div class="prayer-grid">
+                <div class="field-group"><label>Emlak Vergisi</label><input type="number" class="exptr-part" id="trEmlakVergisi" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Google</label><input type="number" class="exptr-part" id="trGoogle" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Spotify Premium</label><input type="number" class="exptr-part" id="trSpotify" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Youtube</label><input type="number" class="exptr-part" id="trYoutube" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Amazon TR</label><input type="number" class="exptr-part" id="trAmazonTR" step="0.001" min="0" /></div>
+                <div class="field-group"><label>Various</label><input type="number" class="exptr-part" id="trOthersVarious" step="0.001" min="0" /></div>
+              </div>
+
+              <p class="prayer-hint" style="margin-top:14px">All amounts in k€ (thousands of euros) · both clusters sum into TR Payments total above</p>
+            </div>
+          </div>
+
+          <div class="field-group wide"><label>Notes</label><textarea id="finNotes" placeholder="Optional notes about this month..."></textarea></div>
+
+          <div class="wide actions">
+            <button type="submit" class="btn btn-primary">Save Month</button>
+            <button type="button" id="loadFinMonth" class="btn btn-secondary">Load Month</button>
+            <button type="button" id="blankFinForm" class="btn btn-secondary">Clear Form</button>
+            <button type="button" id="deleteFinMonth" class="btn btn-danger">Delete Month</button>
           </div>
         </div>
       </form>
@@ -269,19 +362,30 @@
         <div class="sheets-step">
           <div class="step-num">4</div>
           <div class="step-body">
-            <div class="step-title">Push / Pull data</div>
+            <div class="step-title">Push / Pull — Daily Log</div>
             <div class="actions" style="margin-top:8px">
-              <button class="btn btn-sheets" id="pullFromSheets">↓ Pull from Sheets</button>
-              <button class="btn btn-secondary" id="pushAllToSheets">↑ Push all local data</button>
+              <button class="btn btn-sheets" id="pullFromSheets">↓ Pull Log from Sheets</button>
+              <button class="btn btn-secondary" id="pushAllToSheets">↑ Push all Log data</button>
             </div>
-            <div class="import-log" id="sheetsLog" style="margin-top:12px">No Sheets activity yet.</div>
           </div>
         </div>
         <div class="sheets-step">
           <div class="step-num">5</div>
           <div class="step-body">
+            <div class="step-title">Push / Pull — Finance</div>
+            <div class="step-desc">Writes to a separate "Finance" tab in the same Sheet, created automatically on first use.</div>
+            <div class="actions" style="margin-top:8px">
+              <button class="btn btn-sheets" id="pullFinFromSheets">↓ Pull Finance from Sheets</button>
+              <button class="btn btn-secondary" id="pushAllFinToSheets">↑ Push all Finance data</button>
+            </div>
+            <div class="import-log" id="sheetsLog" style="margin-top:12px">No Sheets activity yet.</div>
+          </div>
+        </div>
+        <div class="sheets-step">
+          <div class="step-num">6</div>
+          <div class="step-body">
             <div class="step-title">Daily workflow</div>
-            <div class="step-desc">Save a day in Daily Entry → tap <strong>↑ Push to Sheets</strong>. On a different device, open this tab and tap <strong>↓ Pull from Sheets</strong> to merge in the latest data.</div>
+            <div class="step-desc">Save a day in Daily Entry → tap <strong>↑ Push to Sheets</strong>. Save a month in Finance Entry → tap its own push button. On a different device, open this tab and pull to merge in the latest data.</div>
           </div>
         </div>
       </div>
@@ -289,6 +393,6 @@
   </section>
 
 </main>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

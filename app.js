@@ -21,40 +21,110 @@ const ENTRY_FIELDS = ['date','prayTotal','prayS','prayO','prayIk','prayAk','pray
                       'newScore','highlights'];
 const PRAYER_PARTS = ['prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT'];
 
+/* ── Finance entry — monthly, separate from daily Log ── */
+const FIN_SHEET_TAB = 'Finance';
+const EXP_DE_PARTS = ['expHousehold','expSeko','expCiko','expYaz','expPotisko','expTransport','expGrocery','expEatOut','expOthers'];
+const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious'];
+const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
+const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
+const FIN_ENTRY_FIELDS = ['month','income','expDE','expTR','notes',
+  ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','expDE','expTR',
+  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'notes'];
+
 /* ── Historical data — exact values from Dashboard sheet ── */
 // avgScore / newAvgScore: null means not tracked that year
 // weight: yearly average kg
 // expDE: null means Expenses DE not tracked (pre-2023)
 const FINANCE_YEARLY = [
-  {y:2008, avgScore:2.5,    newAvgScore:3.5,   tv:3.2016, read:25.34, sleep:7.100, wo:0.46,  weight:83,    worth:null, income:1.1910, expDE:null,  tr:1.0368},
-  {y:2009, avgScore:5,      newAvgScore:6,      tv:5.1385, read:33.20, sleep:7.256, wo:22.12, weight:80,    worth:null, income:1.0777, expDE:null,  tr:1.0368},
-  {y:2010, avgScore:5,      newAvgScore:6,      tv:4.5235, read:29.10, sleep:7.023, wo:24.62, weight:85,    worth:null, income:1.2498, expDE:null,  tr:1.2583},
-  {y:2011, avgScore:3.5,    newAvgScore:4.5,    tv:3.2591, read:16.28, sleep:7.223, wo:11.46, weight:85,    worth:null, income:1.1347, expDE:null,  tr:1.0787},
-  {y:2012, avgScore:3,      newAvgScore:2.5,    tv:3.0082, read:10.57, sleep:7.174, wo:4.78,  weight:88,    worth:null, income:1.4437, expDE:null,  tr:1.5602},
-  {y:2013, avgScore:2.5,    newAvgScore:2,      tv:3.3834, read:9.10,  sleep:7.137, wo:5.16,  weight:88,    worth:null, income:1.6284, expDE:null,  tr:1.8716},
-  {y:2014, avgScore:2.5,    newAvgScore:2,      tv:2.8249, read:26.09, sleep:7.099, wo:4.03,  weight:89,    worth:null, income:1.6271, expDE:null,  tr:2.0780},
-  {y:2015, avgScore:0.5,    newAvgScore:-0.5,   tv:3.2744, read:16.12, sleep:6.966, wo:0.11,  weight:90,    worth:null, income:1.7900, expDE:null,  tr:1.8534},
-  {y:2016, avgScore:1,      newAvgScore:null,   tv:3.0489, read:9.13,  sleep:6.996, wo:1.31,  weight:90,    worth:null, income:2.0956, expDE:null,  tr:1.2741},
-  {y:2017, avgScore:1,      newAvgScore:null,   tv:2.7936, read:3.15,  sleep:7.033, wo:0.08,  weight:91,    worth:null, income:1.6752, expDE:null,  tr:1.7080},
-  {y:2018, avgScore:null,   newAvgScore:-1,     tv:3.1167, read:4.77,  sleep:6.640, wo:1.20,  weight:91,    worth:null, income:1.5227, expDE:null,  tr:1.7080},
-  {y:2019, avgScore:null,   newAvgScore:-1,     tv:3.1167, read:4.77,  sleep:6.455, wo:1.20,  weight:91,    worth:null, income:1.5573, expDE:null,  tr:1.7239},
-  {y:2020, avgScore:0.5,    newAvgScore:null,   tv:2.9388, read:17.99, sleep:6.322, wo:1.32,  weight:88,    worth:null, income:1.7378, expDE:null,  tr:1.3116},
-  {y:2021, avgScore:null,   newAvgScore:-1,     tv:4.8700, read:1.23,  sleep:6.535, wo:0.26,  weight:93,    worth:null, income:1.8604, expDE:null,  tr:1.1692},
-  {y:2022, avgScore:null,   newAvgScore:-1,     tv:4.8287, read:1.06,  sleep:6.631, wo:1.63,  weight:95,    worth:null, income:2.1582, expDE:null,  tr:1.1126},
-  {y:2023, avgScore:-0.5,   newAvgScore:-1.5,   tv:5.9178, read:3.13,  sleep:6.838, wo:1.33,  weight:90,    worth:12,   income:3.0823, expDE:4.4,   tr:1.7500},
-  {y:2024, avgScore:2,      newAvgScore:1.5,    tv:10.074, read:11.74, sleep:7.269, wo:13.31, weight:89,    worth:40,   income:2.8145, expDE:4.8,   tr:2.1415},
-  {y:2025, avgScore:2,      newAvgScore:1,      tv:9.2823, read:8.96,  sleep:7.245, wo:17.53, weight:90,    worth:115,  income:5.5776, expDE:5.8,   tr:1.5338},
-  {y:2026, avgScore:2.5208, newAvgScore:2.5208, tv:9.2584, read:2.96,  sleep:7.136, wo:16.64, weight:90.53, worth:null, income:6.2573, expDE:5.9488, tr:0.4037},
+  {y:2008, avgScore:2.5,    newAvgScore:3.5,   tv:3.2016, read:25.34, sleep:7.100, wo:0.46,  weight:83},
+  {y:2009, avgScore:5,      newAvgScore:6,      tv:5.1385, read:33.20, sleep:7.256, wo:22.12, weight:80},
+  {y:2010, avgScore:5,      newAvgScore:6,      tv:4.5235, read:29.10, sleep:7.023, wo:24.62, weight:85},
+  {y:2011, avgScore:3.5,    newAvgScore:4.5,    tv:3.2591, read:16.28, sleep:7.223, wo:11.46, weight:85},
+  {y:2012, avgScore:3,      newAvgScore:2.5,    tv:3.0082, read:10.57, sleep:7.174, wo:4.78,  weight:88},
+  {y:2013, avgScore:2.5,    newAvgScore:2,      tv:3.3834, read:9.10,  sleep:7.137, wo:5.16,  weight:88},
+  {y:2014, avgScore:2.5,    newAvgScore:2,      tv:2.8249, read:26.09, sleep:7.099, wo:4.03,  weight:89},
+  {y:2015, avgScore:0.5,    newAvgScore:-0.5,   tv:3.2744, read:16.12, sleep:6.966, wo:0.11,  weight:90},
+  {y:2016, avgScore:1,      newAvgScore:null,   tv:3.0489, read:9.13,  sleep:6.996, wo:1.31,  weight:90},
+  {y:2017, avgScore:1,      newAvgScore:null,   tv:2.7936, read:3.15,  sleep:7.033, wo:0.08,  weight:91},
+  {y:2018, avgScore:null,   newAvgScore:-1,     tv:3.1167, read:4.77,  sleep:6.640, wo:1.20,  weight:91},
+  {y:2019, avgScore:null,   newAvgScore:-1,     tv:3.1167, read:4.77,  sleep:6.455, wo:1.20,  weight:91},
+  {y:2020, avgScore:0.5,    newAvgScore:null,   tv:2.9388, read:17.99, sleep:6.322, wo:1.32,  weight:88},
+  {y:2021, avgScore:null,   newAvgScore:-1,     tv:4.8700, read:1.23,  sleep:6.535, wo:0.26,  weight:93},
+  {y:2022, avgScore:null,   newAvgScore:-1,     tv:4.8287, read:1.06,  sleep:6.631, wo:1.63,  weight:95},
+  {y:2023, avgScore:-0.5,   newAvgScore:-1.5,   tv:5.9178, read:3.13,  sleep:6.838, wo:1.33,  weight:90},
+  {y:2024, avgScore:2,      newAvgScore:1.5,    tv:10.074, read:11.74, sleep:7.269, wo:13.31, weight:89},
+  {y:2025, avgScore:2,      newAvgScore:1,      tv:9.2823, read:8.96,  sleep:7.245, wo:17.53, weight:90},
+  {y:2026, avgScore:2.5208, newAvgScore:2.5208, tv:9.2584, read:2.96,  sleep:7.136, wo:16.64, weight:90.53},
 ];
 
-const FINANCE_MONTHLY_2026 = [
-  {m:1, label:'Jan', income:6.069,  expDE:6.2695, tr:0.2593},
-  {m:2, label:'Feb', income:6.079,  expDE:5.7188, tr:0.2964},
-  {m:3, label:'Mar', income:6.071,  expDE:5.7315, tr:0.2793},
-  {m:4, label:'Apr', income:6.076,  expDE:6.0513, tr:0.2051},
-  {m:5, label:'May', income:6.078,  expDE:7.1809, tr:0.1866},
-  {m:6, label:'Jun', income:7.171,  expDE:4.7410, tr:0.1715},
+/* One-time seed values for historical Finance — totals only, no category breakdown
+   (that level of detail never existed for these years). Used to pre-populate the
+   Finance sheet/local store on first run, exactly once. */
+const FINANCE_SEED_YEARLY = [
+  {y:2008, income:1.1910, expDE:null,  tr:1.0368},
+  {y:2009, income:1.0777, expDE:null,  tr:1.0368},
+  {y:2010, income:1.2498, expDE:null,  tr:1.2583},
+  {y:2011, income:1.1347, expDE:null,  tr:1.0787},
+  {y:2012, income:1.4437, expDE:null,  tr:1.5602},
+  {y:2013, income:1.6284, expDE:null,  tr:1.8716},
+  {y:2014, income:1.6271, expDE:null,  tr:2.0780},
+  {y:2015, income:1.7900, expDE:null,  tr:1.8534},
+  {y:2016, income:2.0956, expDE:null,  tr:1.2741},
+  {y:2017, income:1.6752, expDE:null,  tr:1.7080},
+  {y:2018, income:1.5227, expDE:null,  tr:1.7080},
+  {y:2019, income:1.5573, expDE:null,  tr:1.7239},
+  {y:2020, income:1.7378, expDE:null,  tr:1.3116},
+  {y:2021, income:1.8604, expDE:null,  tr:1.1692},
+  {y:2022, income:2.1582, expDE:null,  tr:1.1126},
+  {y:2023, income:3.0823, expDE:4.4,   tr:1.7500},
+  {y:2024, income:2.8145, expDE:4.8,   tr:2.1415},
+  {y:2025, income:5.5776, expDE:5.8,   tr:1.5338},
 ];
+
+const FINANCE_SEED_MONTHLY_2026 = [
+  {m:1, income:6.069,  expDE:6.2695, tr:0.2593},
+  {m:2, income:6.079,  expDE:5.7188, tr:0.2964},
+  {m:3, income:6.071,  expDE:5.7315, tr:0.2793},
+  {m:4, income:6.076,  expDE:6.0513, tr:0.2051},
+  {m:5, income:6.078,  expDE:7.1809, tr:0.1866},
+  {m:6, income:7.171,  expDE:4.7410, tr:0.1715},
+];
+
+/* Seeds local finance storage with historical totals exactly once.
+   A flag in localStorage prevents re-seeding (e.g. after the user deletes a seeded row). */
+function nullBreakdownFields() {
+  const obj = {};
+  [...EXP_DE_PARTS, ...EXP_TR_PARTS].forEach(f => obj[f] = null);
+  return obj;
+}
+function seedFinanceDataIfNeeded() {
+  const SEED_FLAG = 'serkanFinanceSeeded_v2'; // bumped: v1 used old flat TR fields
+  if (localStorage.getItem(SEED_FLAG)) return;
+  const existing = getFinData();
+  if (existing.length > 0) { localStorage.setItem(SEED_FLAG, '1'); return; } // don't clobber real data
+
+  const seeded = [];
+  FINANCE_SEED_YEARLY.forEach(f => {
+    seeded.push({
+      type: 'yearly', month: `${f.y}`, year: f.y, monthNum: null,
+      income: f.income, expDE: f.expDE, expTR: f.tr,
+      ...nullBreakdownFields(),
+      notes: 'Seeded from historical Excel export — no category breakdown available.',
+    });
+  });
+  FINANCE_SEED_MONTHLY_2026.forEach(f => {
+    const mm = String(f.m).padStart(2,'0');
+    seeded.push({
+      type: 'monthly', month: `2026-${mm}`, year: 2026, monthNum: f.m,
+      income: f.income, expDE: f.expDE, expTR: f.tr,
+      ...nullBreakdownFields(),
+      notes: 'Seeded from historical Excel export — no category breakdown available.',
+    });
+  });
+  setFinData(seeded);
+  localStorage.setItem(SEED_FLAG, '1');
+}
 
 /* ── Chart instances ── */
 let charts = {};
@@ -63,6 +133,10 @@ function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete chart
 /* ── Storage ── */
 function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; } }
 function setData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+
+const FIN_STORAGE_KEY = 'serkanLifeTrackerV3_finance';
+function getFinData() { try { return JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]'); } catch(e) { return []; } }
+function setFinData(d) { localStorage.setItem(FIN_STORAGE_KEY, JSON.stringify(d)); }
 function getSheetId() { return localStorage.getItem(SHEET_ID_KEY) || ''; }
 function setSheetId(id) { localStorage.setItem(SHEET_ID_KEY, id); }
 
@@ -318,6 +392,110 @@ function updatePreview() {
 }
 
 function findDaily(date) { return getData().find(x=>x.type==='daily'&&x.date===date); }
+
+/* ════════════════════════════════════════════
+   FINANCE ENTRY FORM
+════════════════════════════════════════════ */
+function syncExpDETotal() {
+  const parts = EXP_DE_PARTS.map(f => parseNum(document.getElementById(f)?.value));
+  const anyEntered = parts.some(v => v !== null);
+  if (anyEntered) {
+    const sum = parts.reduce((s,v) => s + (v ?? 0), 0);
+    document.getElementById('finExpDE').value = round3(sum);
+  }
+}
+function syncExpTRTotal() {
+  const parts = EXP_TR_PARTS.map(f => parseNum(document.getElementById(f)?.value));
+  const anyEntered = parts.some(v => v !== null);
+  if (anyEntered) {
+    const sum = parts.reduce((s,v) => s + (v ?? 0), 0);
+    document.getElementById('finExpTR').value = round3(sum);
+  }
+}
+function round3(n) { return Math.round(n * 1000) / 1000; }
+
+
+function getFinFormEntry() {
+  const month = document.getElementById('finMonth').value; // "YYYY-MM"
+  if (!month) return null;
+  const [y, m] = month.split('-').map(Number);
+  const e = {
+    type: 'daily-fin', // monthly real entry, distinct from seeded 'monthly'/'yearly'
+    month, year: y, monthNum: m,
+    income: parseNum(document.getElementById('finIncome').value),
+    expDE: parseNum(document.getElementById('finExpDE').value),
+    expTR: parseNum(document.getElementById('finExpTR').value),
+    notes: document.getElementById('finNotes').value || '',
+  };
+  EXP_DE_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
+  EXP_TR_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
+  return e;
+}
+
+function fillFinForm(e) {
+  document.getElementById('finIncome').value = (e && e.income!=null) ? e.income : '';
+  document.getElementById('finExpDE').value  = (e && e.expDE!=null)  ? e.expDE  : '';
+  document.getElementById('finExpTR').value  = (e && e.expTR!=null)  ? e.expTR  : '';
+  document.getElementById('finNotes').value  = (e && e.notes) ? e.notes : '';
+  EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
+  EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
+  const hasDEParts = e && EXP_DE_PARTS.some(f => e[f] != null);
+  const hasTRParts = e && EXP_TR_PARTS.some(f => e[f] != null);
+  setBreakdownExpanded('expDE', hasDEParts);
+  setBreakdownExpanded('expTR', hasTRParts);
+}
+function blankFinForm(keepMonth=false) {
+  const m = document.getElementById('finMonth').value;
+  fillFinForm(null);
+  document.getElementById('finMonth').value = keepMonth ? m : '';
+  setFinStatus('Form cleared');
+}
+function setFinStatus(t) { document.getElementById('finEntryStatus').textContent = t; }
+
+function setBreakdownExpanded(prefix, expanded) {
+  const panel = document.getElementById(prefix + 'Breakdown');
+  const btn = document.getElementById(prefix + 'ToggleBtn');
+  if (!panel || !btn) return;
+  panel.style.display = expanded ? '' : 'none';
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+
+function findFinByMonth(month) { return getFinData().find(x => x.type==='daily-fin' && x.month===month); }
+
+function loadSelectedFinMonth() {
+  const m = document.getElementById('finMonth').value;
+  if (!m) return;
+  const e = findFinByMonth(m);
+  if (e) { fillFinForm(e); setFinStatus('Loaded ' + m); }
+  else { blankFinForm(true); setFinStatus('No entry for ' + m); }
+}
+
+function saveFinEntry(ev) {
+  ev.preventDefault();
+  const e = getFinFormEntry();
+  if (!e || !e.month) return toast('Please select a month', 'err');
+  let data = getFinData();
+  const i = data.findIndex(x => x.type==='daily-fin' && x.month===e.month);
+  if (i>=0) data[i]=e; else data.push(e);
+  data.sort((a,b) => String(a.month).localeCompare(String(b.month)));
+  setFinData(data);
+  setFinStatus('Saved ' + e.month);
+  toast('Month saved — ' + e.month, 'ok');
+  const btn = document.getElementById('pushFinToSheets');
+  if (getSheetId()) { btn.style.display=''; btn.dataset.month=e.month; }
+  renderAll(false);
+}
+
+function deleteFinMonth() {
+  const m = document.getElementById('finMonth').value;
+  if (!m || !confirm('Delete finance entry for ' + m + '?')) return;
+  setFinData(getFinData().filter(x => !(x.type==='daily-fin' && x.month===m)));
+  blankFinForm(true);
+  renderAll(false);
+  toast('Finance entry deleted', 'err');
+}
+
+
 
 function loadSelectedDate() {
   const d = document.getElementById('date').value;
@@ -584,7 +762,36 @@ function renderDashboard() {
 /* ════════════════════════════════════════════
    FINANCE TAB
 ════════════════════════════════════════════ */
-function finDataForYear(y) { return FINANCE_YEARLY.find(f=>f.y===Number(y)) || null; }
+/* Aggregates live finance entries (seeded + real) into one row per year.
+   Real monthly 'daily-fin' entries take priority; falls back to a seeded
+   'yearly' row for years with no real monthly data at all. */
+function finYearlyAggregate() {
+  const data = getFinData();
+  const years = [...new Set(data.map(d => d.year).filter(Boolean))].sort((a,b)=>a-b);
+  return years.map(y => {
+    const monthly = data.filter(d => d.year===y && d.type==='daily-fin');
+    const seededYear = data.find(d => d.year===y && d.type==='yearly');
+    if (monthly.length) {
+      const sum = (k) => { const vals = monthly.map(d=>d[k]).filter(v=>v!=null); return vals.length ? vals.reduce((a,b)=>a+b,0) : null; };
+      return { y, income: sum('income'), expDE: sum('expDE'), tr: sum('expTR') };
+    }
+    if (seededYear) return { y, income: seededYear.income, expDE: seededYear.expDE, tr: seededYear.expTR };
+    return { y, income: null, expDE: null, tr: null };
+  });
+}
+function finDataForYear(y) { return finYearlyAggregate().find(f => f.y === Number(y)) || null; }
+
+function finMonthlyForYear(y) {
+  const data = getFinData();
+  return Array.from({length:12}, (_,i) => {
+    const m = i+1;
+    const real = data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='daily-fin');
+    if (real) return { m, income: real.income, expDE: real.expDE, tr: real.expTR };
+    const seeded = data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='monthly');
+    if (seeded) return { m, income: seeded.income, expDE: seeded.expDE, tr: seeded.expTR };
+    return { m, income: null, expDE: null, tr: null };
+  });
+}
 
 function renderFinKpis() {
   const y  = document.getElementById('yearSelect').value;
@@ -618,8 +825,12 @@ function renderFinKpis() {
 }
 
 function renderFinCharts() {
-  const allY = FINANCE_YEARLY.map(f=>f.y);
-  const yLabels = allY.map(String);
+  const yearly = finYearlyAggregate();
+  if (!yearly.length) {
+    destroyChart('finIncExp'); destroyChart('finMonthly');
+    return;
+  }
+  const yLabels = yearly.map(f => String(f.y));
 
   // Income vs Expenses — all years
   destroyChart('finIncExp');
@@ -644,25 +855,27 @@ function renderFinCharts() {
     data:{
       labels: yLabels,
       datasets:[
-        { ...barSeries('Income k€',      FINANCE_YEARLY.map(f=>f.income), C.green)  },
-        { ...barSeries('Expenses DE k€', FINANCE_YEARLY.map(f=>f.expDE),  C.red)    },
-        { ...barSeries('TR Payments k€', FINANCE_YEARLY.map(f=>f.tr),     C.yellow) },
+        { ...barSeries('Income k€',      yearly.map(f=>f.income), C.green)  },
+        { ...barSeries('Expenses DE k€', yearly.map(f=>f.expDE),  C.red)    },
+        { ...barSeries('TR Payments k€', yearly.map(f=>f.tr),     C.yellow) },
       ]
     },
     options: incExpOptions,
   });
 
-  // Monthly 2026
+  // Monthly breakdown for the currently-selected dashboard year
   destroyChart('finMonthly');
-  document.getElementById('finMonthlyTitle').textContent = '2026 — Monthly income & expenses (k€)';
+  const selectedYear = document.getElementById('yearSelect').value || yearly[yearly.length-1].y;
+  const monthly = finMonthlyForYear(selectedYear);
+  document.getElementById('finMonthlyTitle').textContent = `${selectedYear} — Monthly income & expenses (k€)`;
   charts['finMonthly'] = new Chart(document.getElementById('finMonthlyChart'), {
     type:'bar',
     data:{
-      labels: FINANCE_MONTHLY_2026.map(m=>m.label),
+      labels: MONTHS,
       datasets:[
-        { ...barSeries('Income k€',      FINANCE_MONTHLY_2026.map(m=>m.income), C.green)  },
-        { ...barSeries('Expenses DE k€', FINANCE_MONTHLY_2026.map(m=>m.expDE),  C.red)    },
-        { ...barSeries('TR Payments k€', FINANCE_MONTHLY_2026.map(m=>m.tr),     C.yellow) },
+        { ...barSeries('Income k€',      monthly.map(m=>m.income), C.green)  },
+        { ...barSeries('Expenses DE k€', monthly.map(m=>m.expDE),  C.red)    },
+        { ...barSeries('TR Payments k€', monthly.map(m=>m.tr),     C.yellow) },
       ]
     },
     options: incExpOptions,
@@ -768,17 +981,20 @@ function download(blob, name) {
 /* ════════════════════════════════════════════
    GOOGLE SHEETS  (via Google Apps Script web app)
 ════════════════════════════════════════════ */
-async function appsScriptCall(method, body, timeoutMs = 25000) {
-  const url = getSheetId(); // stores the Apps Script /exec URL
-  if (!url) { toast('No Script URL configured','err'); return null; }
+async function appsScriptCall(method, body, timeoutMs = 25000, tab = null) {
+  const baseUrl = getSheetId(); // stores the Apps Script /exec URL
+  if (!baseUrl) { toast('No Script URL configured','err'); return null; }
   updateSyncStatus('syncing');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    let url = baseUrl;
     const opts = { method, signal: controller.signal };
     if (method === 'POST') {
       opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' }; // avoids CORS preflight on Apps Script
-      opts.body = JSON.stringify(body);
+      opts.body = JSON.stringify(tab ? { ...body, tab } : body);
+    } else if (method === 'GET' && tab) {
+      url += (url.includes('?') ? '&' : '?') + 'tab=' + encodeURIComponent(tab);
     }
     const resp = await fetch(url, opts);
     clearTimeout(timer);
@@ -801,19 +1017,20 @@ async function appsScriptCall(method, body, timeoutMs = 25000) {
 }
 
 async function pushEntryToSheets(entry) {
-  const resp = await appsScriptCall('POST', { mode: 'append', entry });
+  const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Log');
   if (resp) toast('Pushed to Sheets ✓', 'ok');
 }
 
 async function pullFromSheets() {
   const log = document.getElementById('sheetsLog');
   log.textContent = 'Pulling from Sheets…';
-  const resp = await appsScriptCall('GET');
+  const resp = await appsScriptCall('GET', null, 25000, 'Log');
   if (!resp) { log.textContent = 'Pull failed.'; return; }
   try {
     const rows = (resp.rows || []).map(r => {
       ['prayTotal','reading','tv','movies','teeth','workout','sleep','weightKg','targetKg',
-       'deltaKg','water','german','nutrition','bonusMalus','newScore','year','month','day']
+       'deltaKg','water','german','nutrition','bonusMalus','newScore','year','month','day',
+       'prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT']
         .forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
       return r;
     });
@@ -838,17 +1055,67 @@ async function pushAllToSheets() {
   for (let i = 0; i < data.length; i += CHUNK) chunks.push(data.slice(i, i + CHUNK));
 
   log.textContent = `Pushing ${data.length} rows in ${chunks.length} batch(es)…`;
-  // First chunk replaces everything in the sheet; subsequent chunks append.
   let totalWritten = 0;
   for (let i = 0; i < chunks.length; i++) {
     const mode = i === 0 ? 'replaceAll' : 'appendBatch';
     log.textContent = `Pushing batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
-    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 30000);
+    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 30000, 'Log');
     if (!resp) { log.textContent = `✗ Failed at batch ${i+1}/${chunks.length}. ${totalWritten} rows written so far.`; return; }
     totalWritten += resp.written ?? chunks[i].length;
   }
   log.textContent = `✓ Pushed ${totalWritten} rows in ${chunks.length} batch(es).`;
   toast('All data pushed', 'ok');
+}
+
+/* ── Finance tab push/pull (separate "Finance" sheet tab) ── */
+async function pushFinEntryToSheets(entry) {
+  const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Finance');
+  if (resp) toast('Finance month pushed ✓', 'ok');
+}
+
+async function pullFinFromSheets() {
+  const log = document.getElementById('sheetsLog');
+  log.textContent = 'Pulling Finance from Sheets…';
+  const resp = await appsScriptCall('GET', null, 25000, 'Finance');
+  if (!resp) { log.textContent = 'Finance pull failed.'; return; }
+  try {
+    const numericFields = ['year','monthNum','income','expDE','expTR',
+      ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+    const rows = (resp.rows || []).map(r => {
+      numericFields.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
+      return r;
+    });
+    const key = e => `${e.type}|${e.month}`;
+    const by = new Map();
+    getFinData().forEach(e => by.set(key(e), e));
+    rows.forEach(e => { if (e.month) by.set(key(e), e); });
+    const all = [...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month)));
+    setFinData(all);
+    log.textContent = `✓ Pulled ${rows.length} finance rows. Total: ${all.length}.`;
+    toast(`Pulled ${rows.length} finance rows`, 'ok');
+    renderAll();
+  } catch (e) { log.textContent = 'Parse error: ' + e.message; toast('Could not parse Finance response', 'err'); }
+}
+
+async function pushAllFinToSheets() {
+  const data = getFinData();
+  if (!data.length) return toast('No finance data to push', 'err');
+  const log = document.getElementById('sheetsLog');
+  const CHUNK = 150;
+  const chunks = [];
+  for (let i = 0; i < data.length; i += CHUNK) chunks.push(data.slice(i, i + CHUNK));
+
+  log.textContent = `Pushing ${data.length} finance rows in ${chunks.length} batch(es)…`;
+  let totalWritten = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const mode = i === 0 ? 'replaceAll' : 'appendBatch';
+    log.textContent = `Pushing finance batch ${i+1}/${chunks.length}…`;
+    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 30000, 'Finance');
+    if (!resp) { log.textContent = `✗ Failed at batch ${i+1}/${chunks.length}. ${totalWritten} rows written so far.`; return; }
+    totalWritten += resp.written ?? chunks[i].length;
+  }
+  log.textContent = `✓ Pushed ${totalWritten} finance rows in ${chunks.length} batch(es).`;
+  toast('All finance data pushed', 'ok');
 }
 
 function updateSheetUI() {
@@ -911,6 +1178,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e) pushEntryToSheets(e);
   });
 
+  // ── Finance entry form ──
+  seedFinanceDataIfNeeded();
+  const curMonth = new Date().toISOString().slice(0,7);
+  document.getElementById('finMonth').value = curMonth;
+
+  EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.addEventListener('input', syncExpDETotal); });
+  EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.addEventListener('input', syncExpTRTotal); });
+  document.getElementById('expDEToggleBtn').addEventListener('click', () => {
+    const expanded = document.getElementById('expDEToggleBtn').getAttribute('aria-expanded') === 'true';
+    setBreakdownExpanded('expDE', !expanded);
+  });
+  document.getElementById('expTRToggleBtn').addEventListener('click', () => {
+    const expanded = document.getElementById('expTRToggleBtn').getAttribute('aria-expanded') === 'true';
+    setBreakdownExpanded('expTR', !expanded);
+  });
+  document.getElementById('finMonth').addEventListener('change', loadSelectedFinMonth);
+  document.getElementById('finEntryForm').addEventListener('submit', saveFinEntry);
+  document.getElementById('loadFinMonth').addEventListener('click', loadSelectedFinMonth);
+  document.getElementById('blankFinForm').addEventListener('click', () => blankFinForm(false));
+  document.getElementById('deleteFinMonth').addEventListener('click', deleteFinMonth);
+  document.getElementById('pushFinToSheets').addEventListener('click', () => {
+    const m = document.getElementById('pushFinToSheets').dataset.month || curMonth;
+    const e = findFinByMonth(m);
+    if (e) pushFinEntryToSheets(e);
+  });
+  loadSelectedFinMonth();
+
   // Nav
   document.querySelectorAll('.nav-btn').forEach(b =>
     b.addEventListener('click', () => switchView(b.dataset.view)));
@@ -967,6 +1261,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('pullFromSheets').addEventListener('click', pullFromSheets);
   document.getElementById('pushAllToSheets').addEventListener('click', pushAllToSheets);
+  document.getElementById('pullFinFromSheets').addEventListener('click', pullFinFromSheets);
+  document.getElementById('pushAllFinToSheets').addEventListener('click', pushAllFinToSheets);
 
   // Boot
   ensureYearSelectors();
