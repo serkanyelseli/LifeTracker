@@ -849,12 +849,18 @@ function renderFinDashKpis() {
   const b  = compareActive ? finDataForYear(cy) : null;
   if (!a) { document.getElementById('finDashKpiGrid').innerHTML=''; return; }
 
-  const netA = (a.income!=null && a.expDE!=null && a.tr!=null) ? a.income - a.expDE - a.tr : null;
-  const netB = (b && b.income!=null && b.expDE!=null && b.tr!=null) ? b.income - b.expDE - b.tr : null;
-  const savingsA = (a.income) ? (netA!=null ? (netA/a.income*100) : null) : null;
-  const savingsB = (b && b.income) ? (netB!=null ? (netB/b.income*100) : null) : null;
+  function calcNet(row) {
+    if (!row || (row.income==null && row.expDE==null && row.tr==null)) return { net:null, partial:false };
+    const partial = row.income==null || row.expDE==null || row.tr==null;
+    const net = (row.income ?? 0) - (row.expDE ?? 0) - (row.tr ?? 0);
+    return { net: round3(net), partial };
+  }
+  const { net:netA, partial:partialA } = calcNet(a);
+  const { net:netB } = calcNet(b);
+  const savingsA = (a.income && netA!=null) ? (netA/a.income*100) : null;
+  const savingsB = (b && b.income && netB!=null) ? (netB/b.income*100) : null;
 
-  function finCard(title, valA, valB, unit='k€', lowerBetter=false, decimals=2) {
+  function finCard(title, valA, valB, unit='k€', lowerBetter=false, decimals=2, partialFlag=false) {
     const v = valA!=null ? fmt(valA, decimals)+' '+unit : '—';
     const delta = (valA!=null && valB!=null) ? valA-valB : null;
     const trivial = delta!=null && Math.abs(delta)<0.01;
@@ -864,8 +870,9 @@ function renderFinDashKpis() {
         : trivial ? `~${(delta>=0?'+':'')+fmt(delta,decimals)} (≈same) vs ${cy}`
         : `${(delta>=0?'+':'')+fmt(delta,decimals)} vs ${cy}`)
       : 'Single year';
+    const partialTag = partialFlag ? `<span class="partial-tag" title="One or more components (Income/Expenses DE/TR) missing for part of this period">partial</span>` : '';
     return `<div class="fin-card">
-      <div class="fin-title">${title} · ${y}</div>
+      <div class="fin-title">${title} · ${y}${partialTag}</div>
       <div class="fin-value">${v}</div>
       <div class="fin-delta ${cls}" style="margin-top:6px">${dText}</div>
     </div>`;
@@ -875,8 +882,8 @@ function renderFinDashKpis() {
     finCard('Income',           a.income, b?.income, 'k€', false) +
     finCard('Expenses DE',      a.expDE,  b?.expDE,  'k€', true)  +
     finCard('TR Payments',      a.tr,     b?.tr,      'k€', true)  +
-    finCard('Net Cashflow',     netA,     netB,       'k€', false) +
-    finCard('Savings Rate',     savingsA, savingsB,   '%',  false, 1);
+    finCard('Net Cashflow',     netA,     netB,       'k€', false, 2, partialA) +
+    finCard('Savings Rate',     savingsA, savingsB,   '%',  false, 1, partialA);
 }
 
 function renderFinDashCharts() {
@@ -946,16 +953,43 @@ function renderFinDashCharts() {
   charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions });
 
   // ── Chart 2: Net cashflow ──
+  // Treat a missing component as 0 rather than requiring Income+ExpDE+TR to
+  // all be present — otherwise years with Income-only data (no DE detail yet)
+  // would show no bar at all, which is misleading since we DO know the net
+  // contribution from what we have. Years with truly nothing show no bar.
   destroyChart('finDashNet');
   const netSeries = labels.map((_, i) => {
     const inc = incomeSeries[i], de = expDESeries[i], tr = trSeries[i];
-    return (inc!=null && de!=null && tr!=null) ? round3(inc - de - tr) : null;
+    if (inc==null && de==null && tr==null) return null; // nothing at all known
+    return round3((inc ?? 0) - (de ?? 0) - (tr ?? 0));
   });
-  const netColors = netSeries.map(v => v==null ? '#444' : v>=0 ? C.green : C.red);
+  const netIncomplete = labels.map((_, i) => incomeSeries[i]==null || expDESeries[i]==null || trSeries[i]==null);
+  const netColors = netSeries.map((v,i) => {
+    if (v==null) return '#444';
+    const base = v>=0 ? C.green : C.red;
+    return netIncomplete[i] ? base+'55' : base+'cc'; // partial years shown lighter/more transparent
+  });
   charts['finDashNet'] = new Chart(document.getElementById('finDashNetChart'), {
     type:'bar',
-    data:{ labels, datasets:[{ label:'Net k€', data:netSeries, backgroundColor:netColors.map(c=>c+'cc'), borderRadius:4, borderSkipped:false }] },
-    options: { ...barOptions, plugins:{ ...barOptions.plugins, legend:{display:false} } }
+    data:{ labels, datasets:[{ label:'Net k€', data:netSeries, backgroundColor:netColors, borderRadius:4, borderSkipped:false }] },
+    options: {
+      ...barOptions,
+      plugins:{
+        ...barOptions.plugins,
+        legend:{display:false},
+        tooltip:{
+          ...barOptions.plugins.tooltip,
+          callbacks:{
+            label: ctx => {
+              const v = ctx.parsed.y;
+              const partial = netIncomplete[ctx.dataIndex];
+              if (v==null) return ' No data';
+              return partial ? ` Net: ${v.toFixed(2)} k€ (partial — missing Expenses DE or TR for this period)` : ` Net: ${v.toFixed(2)} k€`;
+            }
+          }
+        }
+      }
+    }
   });
 
   // ── Chart 3: DE category breakdown (stacked bar) ──
