@@ -746,16 +746,25 @@ function renderDashboard() {
     const cyLast = lastDataMonth(cy);
     const cyVals = monthlyValues(cy, metric).map((v,i) => i < cyLast ? v : null);
     mSeries.push(lineSeries(cy, cyVals, C.yellow));
+  } else {
+    // Average reference line only makes sense in single-year view — once a second
+    // year is being compared directly, the two solid lines already tell that story
+    // and a third dashed "average" line becomes visual noise rather than signal.
+    const yAvg = aggregate(rowsForYear(y), metric);
+    if (yAvg!=null) mSeries.push(lineSeries(`${y} avg`, new Array(12).fill(yAvg), C.yellow, {dashed:true}));
   }
-  const yAvg = aggregate(rowsForYear(y), metric);
-  if (yAvg!=null) mSeries.push(lineSeries(`${y} avg`, new Array(12).fill(yAvg), C.yellow, {dashed:true}));
   charts['monthly'] = new Chart(document.getElementById('monthlyChart'), chartDefaults(MONTHS, mSeries, {decimals}));
 
-  // Yearly chart
+  // Yearly chart — all-time average reference line added, so you can see at a
+  // glance which years sit above/below your long-term baseline for this metric.
   destroyChart('yearly');
   const yy = yearlyValues(metric);
-  charts['yearly'] = new Chart(document.getElementById('yearChart'), chartDefaults(yy.labels, [lineSeries(metric, yy.values, C.blue, {fill:true})], {decimals}));
+  const ySeries = [lineSeries(metric, yy.values, C.blue, {fill:true})];
+  const allTimeAvg = avg(yy.values);
+  if (allTimeAvg!=null) ySeries.push(lineSeries('all-time avg', new Array(yy.labels.length).fill(round1(allTimeAvg)), C.purple, {dashed:true}));
+  charts['yearly'] = new Chart(document.getElementById('yearChart'), chartDefaults(yy.labels, ySeries, {decimals}));
 }
+function round1(n) { return Math.round(n*10)/10; }
 
 /* ════════════════════════════════════════════
    FINANCE DASHBOARD (separate tab/nav, own filters)
