@@ -540,6 +540,7 @@ function switchView(v) {
   if (v==='dashboard') renderDashboard();
   else if (v==='finDashboard') renderFinDashboard();
   else if (v==='history') renderHistory();
+  // 'guide' is static HTML — no render needed
 }
 
 /* ════════════════════════════════════════════
@@ -726,9 +727,87 @@ function renderKpis() {
   }).join('');
 }
 
+/* ════════════════════════════════════════════
+   ALL-TIME RECORDS
+════════════════════════════════════════════ */
+const RECORD_METRICS = [
+  { key:'newScore',  label:'New Score',    icon:'⭐', higher:true,  unit:'',    decimals:1 },
+  { key:'prayTotal', label:'Prayer',       icon:'🤲', higher:true,  unit:'',    decimals:1 },
+  { key:'reading',   label:'Reading',      icon:'📖', higher:true,  unit:'p',   decimals:0 },
+  { key:'workout',   label:'Workout',      icon:'💪', higher:true,  unit:'min', decimals:0 },
+  { key:'sleep',     label:'Sleep',        icon:'😴', higher:true,  unit:'h',   decimals:1 },
+  { key:'water',     label:'Water',        icon:'💧', higher:true,  unit:'L',   decimals:1 },
+  { key:'german',    label:'German',       icon:'🇩🇪', higher:true,  unit:'min', decimals:0 },
+  { key:'weightKg',  label:'Lowest Weight',icon:'⚖️', higher:false, unit:'kg',  decimals:1 },
+  { key:'tvMovies',  label:'Lowest TV',    icon:'📺', higher:false, unit:'ep',  decimals:1 },
+];
+
+function renderRecords() {
+  const data = getData().filter(d => d.type === 'daily');
+  if (!data.length) { document.getElementById('recordsGrid').innerHTML = '<p style="color:var(--muted);font-size:13px">No daily entries yet — records will appear once you have logged data.</p>'; return; }
+
+  // Pre-compute monthly averages for each metric across all months with daily data
+  const monthMap = {};
+  data.forEach(d => {
+    const key = `${d.year}-${String(d.month).padStart(2,'0')}`;
+    if (!monthMap[key]) monthMap[key] = { key, year: d.year, month: d.month, entries: [] };
+    monthMap[key].entries.push(d);
+  });
+
+  function monthLabel(y, m) {
+    return `${MONTHS[m-1]} ${y}`;
+  }
+  function avgField(entries, field) {
+    const vals = entries.map(e => field === 'tvMovies' ? (num0(e.tv)+num0(e.movies)) : parseNum(e[field])).filter(v => v !== null);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  }
+
+  const cards = RECORD_METRICS.map(m => {
+    // Find best monthly average for this metric (using daily entries grouped by month)
+    let bestVal = null, bestMonth = null;
+    Object.values(monthMap).forEach(mon => {
+      const v = avgField(mon.entries, m.key);
+      if (v === null) return;
+      if (bestVal === null || (m.higher ? v > bestVal : v < bestVal)) {
+        bestVal = v; bestMonth = mon;
+      }
+    });
+    if (bestVal === null || !bestMonth) return null;
+
+    // Also find all-time best single day
+    let bestDayVal = null, bestDay = null;
+    data.forEach(d => {
+      const v = m.key === 'tvMovies' ? (num0(d.tv)+num0(d.movies)) : parseNum(d[m.key]);
+      if (v === null) return;
+      if (bestDayVal === null || (m.higher ? v > bestDayVal : v < bestDayVal)) {
+        bestDayVal = v; bestDay = d;
+      }
+    });
+
+    const monthAvgFmt = bestVal.toFixed(m.decimals) + (m.unit ? ' ' + m.unit : '');
+    const when = monthLabel(bestMonth.year, bestMonth.month);
+    const dayNote = bestDay && bestDay.date !== `${bestMonth.year}-${String(bestMonth.month).padStart(2,'0')}-01`
+      ? `Best day: ${bestDayVal.toFixed(m.decimals)}${m.unit?' '+m.unit:''} on ${bestDay.date}`
+      : '';
+
+    return `<div class="record-card">
+      <div class="record-trophy">${m.icon}</div>
+      <div class="record-metric">${m.label}</div>
+      <div class="record-value">${monthAvgFmt}/day avg</div>
+      <div class="record-when">🏆 ${when}</div>
+      ${dayNote ? `<div class="record-note">${dayNote}</div>` : ''}
+    </div>`;
+  }).filter(Boolean);
+
+  document.getElementById('recordsGrid').innerHTML = cards.length
+    ? cards.join('')
+    : '<p style="color:var(--muted);font-size:13px">Not enough data to compute records yet.</p>';
+}
+
 function renderDashboard() {
   ensureYearSelectors();
   renderKpis();
+  renderRecords();
 
   const metric = document.getElementById('metricSelect').value;
   const y  = document.getElementById('yearSelect').value;
