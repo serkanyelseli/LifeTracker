@@ -743,58 +743,61 @@ const RECORD_METRICS = [
 ];
 
 function renderRecords() {
-  const data = getData().filter(d => d.type === 'daily');
-  if (!data.length) { document.getElementById('recordsGrid').innerHTML = '<p style="color:var(--muted);font-size:13px">No daily entries yet — records will appear once you have logged data.</p>'; return; }
+  const all = getData();
+  // Use monthly AVG rows as the source of truth — one pre-computed value per month,
+  // matching exactly what your Excel tracks. Daily entries are only used for
+  // the "best single day" note where available.
+  const monthlyRows = all.filter(d => d.type === 'monthly' && d.year && d.month);
+  const dailyRows   = all.filter(d => d.type === 'daily');
 
-  // Pre-compute monthly averages for each metric across all months with daily data
-  const monthMap = {};
-  data.forEach(d => {
-    const key = `${d.year}-${String(d.month).padStart(2,'0')}`;
-    if (!monthMap[key]) monthMap[key] = { key, year: d.year, month: d.month, entries: [] };
-    monthMap[key].entries.push(d);
-  });
-
-  function monthLabel(y, m) {
-    return `${MONTHS[m-1]} ${y}`;
+  if (!monthlyRows.length) {
+    document.getElementById('recordsGrid').innerHTML =
+      '<p style="color:var(--muted);font-size:13px">No monthly average data found — import your Overall CSV to populate records.</p>';
+    return;
   }
-  function avgField(entries, field) {
-    const vals = entries.map(e => field === 'tvMovies' ? (num0(e.tv)+num0(e.movies)) : parseNum(e[field])).filter(v => v !== null);
-    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+
+  function monthLabel(y, m) { return `${MONTHS[m-1]} ${y}`; }
+
+  function fieldVal(row, field) {
+    if (field === 'tvMovies') {
+      const v = (num0(row.tv) + num0(row.movies));
+      return v > 0 ? v : null;
+    }
+    return parseNum(row[field]);
   }
 
   const cards = RECORD_METRICS.map(m => {
-    // Find best monthly average for this metric (using daily entries grouped by month)
-    let bestVal = null, bestMonth = null;
-    Object.values(monthMap).forEach(mon => {
-      const v = avgField(mon.entries, m.key);
+    let bestVal = null, bestRow = null;
+    monthlyRows.forEach(row => {
+      const v = fieldVal(row, m.key);
       if (v === null) return;
       if (bestVal === null || (m.higher ? v > bestVal : v < bestVal)) {
-        bestVal = v; bestMonth = mon;
+        bestVal = v; bestRow = row;
       }
     });
-    if (bestVal === null || !bestMonth) return null;
+    if (bestVal === null || !bestRow) return null;
 
-    // Also find all-time best single day
+    // Best single day — from daily entries only (monthly AVGs have no single-day detail)
     let bestDayVal = null, bestDay = null;
-    data.forEach(d => {
-      const v = m.key === 'tvMovies' ? (num0(d.tv)+num0(d.movies)) : parseNum(d[m.key]);
+    dailyRows.forEach(d => {
+      const v = fieldVal(d, m.key);
       if (v === null) return;
       if (bestDayVal === null || (m.higher ? v > bestDayVal : v < bestDayVal)) {
         bestDayVal = v; bestDay = d;
       }
     });
 
-    const monthAvgFmt = bestVal.toFixed(m.decimals) + (m.unit ? ' ' + m.unit : '');
-    const when = monthLabel(bestMonth.year, bestMonth.month);
-    const dayNote = bestDay && bestDay.date !== `${bestMonth.year}-${String(bestMonth.month).padStart(2,'0')}-01`
+    const valFmt = bestVal.toFixed(m.decimals) + (m.unit ? ' '+m.unit : '');
+    const when = monthLabel(bestRow.year, bestRow.month);
+    const dayNote = bestDay
       ? `Best day: ${bestDayVal.toFixed(m.decimals)}${m.unit?' '+m.unit:''} on ${bestDay.date}`
       : '';
 
     return `<div class="record-card">
       <div class="record-trophy">${m.icon}</div>
       <div class="record-metric">${m.label}</div>
-      <div class="record-value">${monthAvgFmt}/day avg</div>
-      <div class="record-when">🏆 ${when}</div>
+      <div class="record-value">${valFmt}</div>
+      <div class="record-when">🏆 ${when} · monthly avg</div>
       ${dayNote ? `<div class="record-note">${dayNote}</div>` : ''}
     </div>`;
   }).filter(Boolean);
