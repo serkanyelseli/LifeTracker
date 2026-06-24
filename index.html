@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=15" />
+  <link rel="stylesheet" href="styles.css?v=16" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V3.0 · build 15</span>
+    <span class="version-badge">V3.0 · build 16</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -40,6 +40,7 @@
     <button class="nav-btn" data-view="history">History</button>
     <button class="nav-btn" data-view="import">Import / Export</button>
     <button class="nav-btn" data-view="sheets">Google Sheets</button>
+    <button class="nav-btn" data-view="calendar">Calendar</button>
     <button class="nav-btn" data-view="guide">Scoring Guide</button>
   </nav>
 </header>
@@ -442,6 +443,69 @@
       </div>
     </div>
   </section>
+  <!-- ── CALENDAR ── -->
+  <section id="calendar" class="view">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div class="panel-title" style="margin-bottom:0">Calendar & Reminders</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-secondary" id="calPrev" style="padding:6px 12px">‹</button>
+          <span id="calMonthLabel" style="font-size:14px;font-weight:500;min-width:120px;text-align:center"></span>
+          <button class="btn btn-secondary" id="calNext" style="padding:6px 12px">›</button>
+          <button class="btn btn-secondary" id="calToday" style="padding:6px 10px;font-size:12px">Today</button>
+        </div>
+      </div>
+
+      <!-- Calendar grid -->
+      <div class="cal-grid-header">
+        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+      </div>
+      <div id="calGrid" class="cal-grid"></div>
+    </div>
+
+    <!-- Upcoming events -->
+    <div class="panel">
+      <div class="panel-title">Upcoming — next 30 days</div>
+      <div id="calUpcoming"></div>
+    </div>
+
+    <!-- Event management -->
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="panel-title" style="margin-bottom:0">Add / Edit Event</div>
+      </div>
+      <div class="entry-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="field-group"><label>Date</label><input type="date" id="calEventDate" /></div>
+        <div class="field-group">
+          <label>Type</label>
+          <select id="calEventType">
+            <option value="birthday">🎂 Birthday</option>
+            <option value="anniversary">💍 Anniversary</option>
+            <option value="holiday">🎉 Holiday</option>
+            <option value="school">🏫 School</option>
+            <option value="other">📌 Other</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Recurring annually</label>
+          <select id="calEventRecurring">
+            <option value="1">Yes — repeats every year</option>
+            <option value="0">No — one-off this year only</option>
+          </select>
+        </div>
+        <div class="field-group wide" style="grid-column:1/-1"><label>Name / Description</label><input type="text" id="calEventName" placeholder="e.g. Seko's birthday" /></div>
+        <div class="wide actions">
+          <button class="btn btn-primary" id="saveCalEvent">Save Event</button>
+          <button class="btn btn-secondary" id="clearCalEvent">Clear</button>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <div class="panel-title">All events</div>
+        <div id="calEventList"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ── SCORING GUIDE ── -->
   <section id="guide" class="view">
     <div class="panel">
@@ -563,6 +627,6 @@
   </section>
 
 </main>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

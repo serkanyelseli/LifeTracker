@@ -533,6 +533,231 @@ function deleteDay() {
 /* ════════════════════════════════════════════
    NAVIGATION
 ════════════════════════════════════════════ */
+/* ════════════════════════════════════════════
+   CALENDAR & REMINDERS
+════════════════════════════════════════════ */
+const CAL_STORAGE_KEY = 'serkanCalendarV1';
+const CAL_SEED_KEY    = 'serkanCalSeeded_v1';
+
+// Event types config
+const CAL_TYPES = {
+  birthday:    { label:'Birthday',    icon:'🎂', cls:'birthday'    },
+  anniversary: { label:'Anniversary', icon:'💍', cls:'anniversary' },
+  holiday:     { label:'Holiday',     icon:'🎉', cls:'holiday'     },
+  school:      { label:'School',      icon:'🏫', cls:'school'      },
+  other:       { label:'Other',       icon:'📌', cls:'other'       },
+};
+
+// Seed data — all 27 events from your bday.csv + Zeynep Ozkan
+// recurring:true = repeats every year on same MM-DD
+// recurring:false = one specific calendar year only
+const CAL_SEED_EVENTS = [
+  {id:'s01', month:1,  day:13, name:'Sinan Kula',          type:'birthday',    recurring:true},
+  {id:'s02', month:3,  day:14, name:'Zeynep Ozkan',        type:'birthday',    recurring:true},
+  {id:'s03', month:5,  day:10, name:"Mother's Day 2026",   type:'holiday',     recurring:false, year:2026},
+  {id:'s04', month:5,  day:20, name:'Soykan',              type:'birthday',    recurring:true},
+  {id:'s05', month:5,  day:22, name:'Zeynep Aydin',        type:'birthday',    recurring:true},
+  {id:'s06', month:5,  day:25, name:'Luca Cipollone',      type:'birthday',    recurring:true},
+  {id:'s07', month:5,  day:27, name:'Seval Gundem (?)',    type:'birthday',    recurring:true},
+  {id:'s08', month:5,  day:30, name:'C. Torcuk',           type:'birthday',    recurring:true},
+  {id:'s09', month:6,  day:6,  name:'Saban Sahin',         type:'birthday',    recurring:true},
+  {id:'s10', month:6,  day:9,  name:'Nurdan Nazli Doruk',  type:'birthday',    recurring:true},
+  {id:'s11', month:6,  day:12, name:'Germany Arrival Anniversary', type:'anniversary', recurring:true},
+  {id:'s12', month:6,  day:15, name:'Onur Yagan',          type:'birthday',    recurring:true},
+  {id:'s13', month:6,  day:21, name:"Father's Day 2026",   type:'holiday',     recurring:false, year:2026},
+  {id:'s14', month:6,  day:23, name:'Marriage Anniversary', type:'anniversary', recurring:true},
+  {id:'s15', month:6,  day:30, name:'Omer Torun',          type:'birthday',    recurring:true},
+  {id:'s16', month:7,  day:2,  name:'Babam',               type:'birthday',    recurring:true},
+  {id:'s17', month:7,  day:27, name:'Kemal Izin',          type:'birthday',    recurring:true},
+  {id:'s18', month:8,  day:25, name:'Minnak',              type:'birthday',    recurring:true},
+  {id:'s19', month:10, day:4,  name:'Patrizia',            type:'birthday',    recurring:true},
+  {id:'s20', month:10, day:12, name:'MY Birthday 🎉',      type:'birthday',    recurring:true},
+  {id:'s21', month:10, day:16, name:'Luca Catalano',       type:'birthday',    recurring:true},
+  {id:'s22', month:11, day:1,  name:'Dating Anniversary',  type:'anniversary', recurring:true},
+  {id:'s23', month:11, day:2,  name:'Incik',               type:'birthday',    recurring:true},
+  {id:'s24', month:11, day:7,  name:'Pisi',                type:'birthday',    recurring:true},
+  {id:'s25', month:12, day:12, name:'Murat Yildizhan',     type:'birthday',    recurring:true},
+  {id:'s26', month:12, day:21, name:'Harun',               type:'birthday',    recurring:true},
+  {id:'s27', month:12, day:25, name:'Christmas',           type:'holiday',     recurring:true},
+  {id:'s28', month:12, day:31, name:'Annem',               type:'birthday',    recurring:true},
+  {id:'s29', month:1,  day:1,  name:"New Year's Day",      type:'holiday',     recurring:true},
+];
+
+function getCalEvents() {
+  try { return JSON.parse(localStorage.getItem(CAL_STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+function setCalEvents(d) { localStorage.setItem(CAL_STORAGE_KEY, JSON.stringify(d)); }
+
+function seedCalendarIfNeeded() {
+  if (localStorage.getItem(CAL_SEED_KEY)) return;
+  const existing = getCalEvents();
+  if (!existing.length) setCalEvents(CAL_SEED_EVENTS);
+  localStorage.setItem(CAL_SEED_KEY, '1');
+}
+
+// Current calendar view state
+let calViewYear  = new Date().getFullYear();
+let calViewMonth = new Date().getMonth() + 1; // 1-12
+
+/* Returns events that apply on a given {year, month, day} */
+function eventsOnDay(year, month, day) {
+  return getCalEvents().filter(e => {
+    if (e.recurring) return e.month === month && e.day === day;
+    return (e.year || 0) === year && e.month === month && e.day === day;
+  });
+}
+
+/* Returns all events occurring in the next `days` calendar days from today */
+function upcomingEvents(days=30) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const end = new Date(today); end.setDate(end.getDate() + days);
+  const results = [];
+  const allEvents = getCalEvents();
+  // Iterate day by day
+  const cur = new Date(today);
+  while (cur <= end) {
+    const y = cur.getFullYear(), m = cur.getMonth()+1, d = cur.getDate();
+    allEvents.forEach(e => {
+      const matches = e.recurring
+        ? e.month === m && e.day === d
+        : (e.year||0) === y && e.month === m && e.day === d;
+      if (matches) {
+        const daysAway = Math.round((cur - today) / 86400000);
+        results.push({ ...e, occursOn: new Date(cur), daysAway });
+      }
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return results.sort((a,b) => a.daysAway - b.daysAway);
+}
+
+function renderCalendar() {
+  seedCalendarIfNeeded();
+  renderCalGrid();
+  renderUpcoming();
+  renderEventList();
+}
+
+function renderCalGrid() {
+  const y = calViewYear, m = calViewMonth;
+  document.getElementById('calMonthLabel').textContent = `${MONTHS[m-1]} ${y}`;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const firstDay = new Date(y, m-1, 1);
+  const lastDay  = new Date(y, m, 0);
+  // Start on Monday (0=Sun→6, 1=Mon→0)
+  let startDow = firstDay.getDay(); // 0=Sun
+  startDow = startDow === 0 ? 6 : startDow - 1; // shift so Mon=0
+
+  let html = '';
+  // Pad with previous month days
+  for (let i = 0; i < startDow; i++) {
+    const prevDate = new Date(y, m-1, -startDow + i + 1);
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${prevDate.getDate()}</div></div>`;
+  }
+  // Current month days
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const thisDate = new Date(y, m-1, d); thisDate.setHours(0,0,0,0);
+    const isToday = thisDate.getTime() === today.getTime();
+    const events = eventsOnDay(y, m, d);
+    const dots = events.map(e => `<span class="cal-dot ${CAL_TYPES[e.type]?.cls||'other'}" title="${e.name}"></span>`).join('');
+    html += `<div class="cal-day${isToday?' today':''}${events.length?' has-events':''}"
+      onclick="calDayClick(${y},${m},${d})" title="${events.map(e=>CAL_TYPES[e.type]?.icon+' '+e.name).join('\n')||''}">
+      <div class="cal-day-num">${d}</div>
+      <div class="cal-day-dots">${dots}</div>
+    </div>`;
+  }
+  // Pad end to complete grid
+  const totalCells = startDow + lastDay.getDate();
+  const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (let i = 1; i <= remaining; i++) {
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+}
+
+function calDayClick(y, m, d) {
+  const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  document.getElementById('calEventDate').value = dateStr;
+  document.getElementById('calEventName').focus();
+}
+
+function renderUpcoming() {
+  const events = upcomingEvents(30);
+  if (!events.length) {
+    document.getElementById('calUpcoming').innerHTML = '<p style="color:var(--muted);font-size:13px">No events in the next 30 days.</p>';
+    return;
+  }
+  document.getElementById('calUpcoming').innerHTML = events.map(e => {
+    const t = CAL_TYPES[e.type] || CAL_TYPES.other;
+    const dateLabel = `${String(e.occursOn.getDate()).padStart(2,'0')} ${MONTHS[e.occursOn.getMonth()]}`;
+    let daysTag, daysClass;
+    if (e.daysAway === 0) { daysTag = 'Today!'; daysClass = 'today-tag'; }
+    else if (e.daysAway <= 3) { daysTag = `In ${e.daysAway}d`; daysClass = 'soon-tag'; }
+    else { daysTag = `In ${e.daysAway}d`; daysClass = 'future-tag'; }
+    return `<div class="upcoming-event">
+      <span class="upcoming-date">${dateLabel}</span>
+      <span class="upcoming-badge">${t.icon}</span>
+      <span class="upcoming-name">${e.name}</span>
+      <span class="upcoming-days ${daysClass}">${daysTag}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderEventList() {
+  const events = [...getCalEvents()].sort((a,b) => a.month!==b.month ? a.month-b.month : a.day-b.day);
+  if (!events.length) { document.getElementById('calEventList').innerHTML = '<p style="color:var(--muted);font-size:13px">No events yet.</p>'; return; }
+  document.getElementById('calEventList').innerHTML = events.map(e => {
+    const t = CAL_TYPES[e.type] || CAL_TYPES.other;
+    const dateLabel = `${String(e.day).padStart(2,'0')}/${String(e.month).padStart(2,'0')}`;
+    const recurLabel = e.recurring ? '↻ annual' : `${e.year} only`;
+    return `<div class="cal-event-item">
+      <span class="cal-event-date">${dateLabel}</span>
+      <span style="font-size:14px">${t.icon}</span>
+      <span class="cal-event-name">${e.name}</span>
+      <span class="cal-event-type ${e.type}">${t.label}</span>
+      <span class="cal-event-recurring">${recurLabel}</span>
+      <button class="cal-delete-btn" onclick="deleteCalEvent('${e.id}')" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function saveCalEvent() {
+  const dateVal = document.getElementById('calEventDate').value;
+  const name    = document.getElementById('calEventName').value.trim();
+  const type    = document.getElementById('calEventType').value;
+  const recurring = document.getElementById('calEventRecurring').value === '1';
+  if (!dateVal || !name) return toast('Please fill in a date and name', 'err');
+  const d = new Date(dateVal + 'T00:00:00');
+  const event = {
+    id: 'ev_' + Date.now(),
+    month: d.getMonth()+1,
+    day: d.getDate(),
+    name, type, recurring,
+    ...(recurring ? {} : { year: d.getFullYear() }),
+  };
+  const events = getCalEvents();
+  events.push(event);
+  setCalEvents(events);
+  toast('Event saved', 'ok');
+  clearCalEventForm();
+  renderCalendar();
+}
+
+function deleteCalEvent(id) {
+  if (!confirm('Delete this event?')) return;
+  setCalEvents(getCalEvents().filter(e => e.id !== id));
+  toast('Event deleted', 'err');
+  renderCalendar();
+}
+
+function clearCalEventForm() {
+  document.getElementById('calEventDate').value = '';
+  document.getElementById('calEventName').value = '';
+  document.getElementById('calEventType').value = 'birthday';
+  document.getElementById('calEventRecurring').value = '1';
+}
+
+
 function switchView(v) {
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   document.getElementById(v).classList.add('active');
@@ -540,6 +765,7 @@ function switchView(v) {
   if (v==='dashboard') renderDashboard();
   else if (v==='finDashboard') renderFinDashboard();
   else if (v==='history') renderHistory();
+  else if (v==='calendar') renderCalendar();
   // 'guide' is static HTML — no render needed
 }
 
@@ -1581,10 +1807,58 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('pullFinFromSheets').addEventListener('click', pullFinFromSheets);
   document.getElementById('pushAllFinToSheets').addEventListener('click', pushAllFinToSheets);
 
+  // Calendar
+  seedCalendarIfNeeded();
+  document.getElementById('calPrev').addEventListener('click', () => {
+    calViewMonth--;
+    if (calViewMonth < 1) { calViewMonth = 12; calViewYear--; }
+    renderCalendar();
+  });
+  document.getElementById('calNext').addEventListener('click', () => {
+    calViewMonth++;
+    if (calViewMonth > 12) { calViewMonth = 1; calViewYear++; }
+    renderCalendar();
+  });
+  document.getElementById('calToday').addEventListener('click', () => {
+    calViewYear = new Date().getFullYear();
+    calViewMonth = new Date().getMonth() + 1;
+    renderCalendar();
+  });
+  document.getElementById('saveCalEvent').addEventListener('click', saveCalEvent);
+  document.getElementById('clearCalEvent').addEventListener('click', clearCalEventForm);
+
   // Boot
   ensureYearSelectors();
   updatePreview();
   updateSheetUI();
   loadSelectedDate();
   renderHistory();
+  renderTodayReminder();
 });
+
+/* Show a reminder banner on Daily Entry if today or tomorrow has events */
+function renderTodayReminder() {
+  const today = new Date();
+  const y = today.getFullYear(), m = today.getMonth()+1, d = today.getDate();
+  const tomorrow = new Date(today); tomorrow.setDate(d+1);
+  const ty = tomorrow.getFullYear(), tm = tomorrow.getMonth()+1, td = tomorrow.getDate();
+
+  const todayEvents    = eventsOnDay(y, m, d);
+  const tomorrowEvents = eventsOnDay(ty, tm, td);
+  if (!todayEvents.length && !tomorrowEvents.length) return;
+
+  const banner = document.createElement('div');
+  banner.style.cssText = 'background:var(--accent-dim);border:1px solid rgba(14,165,233,0.2);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--text);line-height:1.8;';
+
+  const parts = [];
+  if (todayEvents.length) {
+    parts.push('<strong>Today:</strong> ' + todayEvents.map(e => `${CAL_TYPES[e.type]?.icon||'📌'} ${e.name}`).join(' · '));
+  }
+  if (tomorrowEvents.length) {
+    parts.push('<strong>Tomorrow:</strong> ' + tomorrowEvents.map(e => `${CAL_TYPES[e.type]?.icon||'📌'} ${e.name}`).join(' · '));
+  }
+  banner.innerHTML = parts.join('<br>');
+
+  const firstPanel = document.getElementById('entry')?.querySelector('.panel');
+  if (firstPanel) firstPanel.insertBefore(banner, firstPanel.firstChild);
+}
