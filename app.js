@@ -721,6 +721,109 @@ function renderEventList() {
   }).join('');
 }
 
+/* ── Public holidays via Nager.Date API ── */
+// Nager.Date returns county codes like ["DE-NI"] for Niedersachsen-specific holidays.
+// We include nationwide holidays (counties: null) + Niedersachsen (DE-NI) for Germany.
+const NAGER_COUNTY_DE = 'DE-NI'; // Niedersachsen (Braunschweig)
+
+async function fetchPublicHolidays(countryCode) {
+  const log = document.getElementById('holFetchLog');
+  const year = document.getElementById('holYear').value;
+  log.textContent = `Fetching ${countryCode} holidays for ${year}…`;
+  try {
+    const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const existing = getCalEvents();
+    const existingKeys = new Set(existing.map(e => `${e.month}-${e.day}-${e.name}`));
+    const toAdd = [];
+
+    data.forEach(h => {
+      // For Germany: include nationwide + Niedersachsen specific holidays
+      if (countryCode === 'DE') {
+        const counties = h.counties;
+        const isNationwide = !counties || counties.length === 0;
+        const isNI = counties && counties.includes(NAGER_COUNTY_DE);
+        if (!isNationwide && !isNI) return; // skip other states
+      }
+      const [y, m, d] = h.date.split('-').map(Number);
+      const name = `🇩🇪 ${h.localName}` || h.name;
+      const key = `${m}-${d}-${name}`;
+      if (existingKeys.has(key)) return; // skip duplicates
+      toAdd.push({
+        id: `nager_${countryCode}_${year}_${h.date}`,
+        month: m, day: d,
+        name: countryCode === 'DE' ? `🇩🇪 ${h.localName}` : `🇹🇷 ${h.localName || h.name}`,
+        type: 'holiday',
+        recurring: false, // fetched per year, not recurring (Easter shifts etc.)
+        year: y,
+      });
+    });
+
+    if (!toAdd.length) {
+      log.textContent = `✓ No new holidays to add — all ${data.length} already in your calendar.`;
+      return;
+    }
+    setCalEvents([...existing, ...toAdd]);
+    log.textContent = `✓ Added ${toAdd.length} ${countryCode} holidays for ${year}. (${data.length - toAdd.length} already existed)`;
+    toast(`Added ${toAdd.length} holidays`, 'ok');
+    renderCalendar();
+  } catch(e) {
+    log.textContent = `✗ Failed: ${e.message}`;
+    toast('Holiday fetch failed: ' + e.message, 'err');
+  }
+}
+
+/* ── School holidays CSV import ── */
+// Expected format: date;name (one per row, semicolon or comma separated)
+// Date can be YYYY-MM-DD or DD.MM.YYYY
+// e.g.: 2026-07-23;Summer holidays start
+//       2026-09-04;Summer holidays end
+function importSchoolHolidayCsv(text) {
+  const log = document.getElementById('schoolImportLog');
+  const existing = getCalEvents();
+  const existingKeys = new Set(existing.map(e => `${e.month}-${e.day}-${e.name}`));
+  const toAdd = [];
+  const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim() && !l.startsWith('#'));
+
+  lines.forEach((line, i) => {
+    const del = line.includes(';') ? ';' : ',';
+    const parts = line.split(del);
+    if (parts.length < 2) return;
+    const rawDate = parts[0].trim();
+    const name = parts.slice(1).join(del).trim().replace(/^"|"$/g,'');
+    if (!name) return;
+
+    // Parse date — YYYY-MM-DD or DD.MM.YYYY
+    let m, d, y;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      [y, m, d] = rawDate.split('-').map(Number);
+    } else if (/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(rawDate)) {
+      const p = rawDate.split('.').map(Number);
+      d = p[0]; m = p[1]; y = p[2];
+    } else { return; } // unrecognised date format
+
+    const key = `${m}-${d}-${name}`;
+    if (existingKeys.has(key)) return;
+    toAdd.push({
+      id: `school_${y}_${m}_${d}_${Date.now()}_${i}`,
+      month: m, day: d, year: y,
+      name, type: 'school',
+      recurring: false,
+    });
+  });
+
+  if (!toAdd.length) {
+    log.textContent = `✓ No new events to add — all entries already exist or file was empty.`;
+    return;
+  }
+  setCalEvents([...existing, ...toAdd]);
+  log.textContent = `✓ Added ${toAdd.length} school holiday events.`;
+  toast(`Added ${toAdd.length} school holidays`, 'ok');
+  renderCalendar();
+}
+
 function saveCalEvent() {
   const dateVal = document.getElementById('calEventDate').value;
   const name    = document.getElementById('calEventName').value.trim();
@@ -1826,6 +1929,40 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('saveCalEvent').addEventListener('click', saveCalEvent);
   document.getElementById('clearCalEvent').addEventListener('click', clearCalEventForm);
+
+  // Holiday year selector — current year + next 2 years
+  const holYearSel = document.getElementById('holYear');
+  const thisYear = new Date().getFullYear();
+  [thisYear, thisYear+1, thisYear+2].forEach(y => {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    holYearSel.appendChild(o);
+  });
+  holYearSel.value = thisYear;
+
+  // Public holiday fetch buttons
+  document.getElementById('fetchHolDE').addEventListener('click', () => fetchPublicHolidays('DE'));
+  document.getElementById('fetchHolTR').addEventListener('click', () => fetchPublicHolidays('TR'));
+
+  // School holidays CSV import
+  const schoolZone = document.getElementById('schoolImportZone');
+  const schoolFile = document.getElementById('schoolCsvFile');
+  schoolZone.addEventListener('click', () => schoolFile.click());
+  schoolFile.addEventListener('change', () => {
+    const f = schoolFile.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => importSchoolHolidayCsv(e.target.result);
+    r.readAsText(f, 'UTF-8');
+  });
+  schoolZone.addEventListener('dragover', e => { e.preventDefault(); schoolZone.classList.add('drag-over'); });
+  schoolZone.addEventListener('dragleave', () => schoolZone.classList.remove('drag-over'));
+  schoolZone.addEventListener('drop', e => {
+    e.preventDefault(); schoolZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => importSchoolHolidayCsv(ev.target.result);
+    r.readAsText(f, 'UTF-8');
+  });
 
   // Boot
   ensureYearSelectors();

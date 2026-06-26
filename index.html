@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V3.0 · build 16</span>
+    <span class="version-badge">V3.0 · build 17</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -469,6 +469,36 @@
       <div id="calUpcoming"></div>
     </div>
 
+    <!-- Public holidays fetch -->
+    <div class="panel">
+      <div class="panel-title">Public Holidays — Auto Import</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Fetch official public holidays for Germany 🇩🇪 and Turkey 🇹🇷 from Nager.Date (free, no API key). Holidays already in your calendar are skipped.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <div class="field-group" style="min-width:100px">
+          <label>Year</label>
+          <select id="holYear" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font:13px var(--sans);padding:7px 10px;"></select>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+          <button class="btn btn-secondary" id="fetchHolDE">🇩🇪 Fetch Germany</button>
+          <button class="btn btn-secondary" id="fetchHolTR">🇹🇷 Fetch Turkey</button>
+        </div>
+      </div>
+      <div class="import-log" id="holFetchLog" style="min-height:36px">Ready to fetch.</div>
+    </div>
+
+    <!-- School holidays CSV import -->
+    <div class="panel">
+      <div class="panel-title">School Holidays — CSV Import</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Import Niedersachsen school holidays from a CSV. Format: one event per row — <code style="font-family:var(--mono);font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:3px">date;name</code> e.g. <code style="font-family:var(--mono);font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:3px">2026-07-23;Summer holidays start</code></p>
+      <div class="import-zone" id="schoolImportZone" style="padding:20px">
+        <div style="font-size:22px">🏫</div>
+        <strong style="font-size:13px">Drop school holidays CSV here</strong>
+        <p>or click to choose file</p>
+        <input type="file" id="schoolCsvFile" accept=".csv,text/csv" style="display:none" />
+      </div>
+      <div class="import-log" id="schoolImportLog" style="min-height:36px">No import yet.</div>
+    </div>
+
     <!-- Event management -->
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -627,6 +657,6 @@
   </section>
 
 </main>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
