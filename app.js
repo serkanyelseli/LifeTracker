@@ -1060,7 +1060,7 @@ function renderKpis() {
 
   const METRICS = [
     ['New Score','newScore'], ['Score (old)','score'], ['Prayer','prayTotal'],
-    ['TV + Movies','tvMovies'], ['Reading','reading'],
+    ['Screen','tvMovies'], ['Reading','reading'],
     ['Sleep h','sleep'], ['Workout min','workout'], ['Weight kg','weightKg'],
     ['Water L','water'], ['German min','german']
   ];
@@ -1096,7 +1096,7 @@ const RECORD_METRICS = [
   { key:'water',     label:'Water',        icon:'💧', higher:true,  unit:'L',   decimals:1 },
   { key:'german',    label:'German',       icon:'🇩🇪', higher:true,  unit:'min', decimals:0 },
   { key:'weightKg',  label:'Lowest Weight',icon:'⚖️', higher:false, unit:'kg',  decimals:1 },
-  { key:'tvMovies',  label:'Lowest TV',    icon:'📺', higher:false, unit:'ep',  decimals:1 },
+  { key:'tvMovies',  label:'Lowest Screen', icon:'📺', higher:false, unit:'ep',  decimals:1 },
 ];
 
 function renderRecords() {
@@ -1191,10 +1191,30 @@ function renderRecords() {
     : '<p style="color:var(--muted);font-size:13px">Not enough data to compute records yet.</p>';
 }
 
+/* Show a nudge banner on the Dashboard if today hasn't been logged yet */
+function renderNotLoggedNudge() {
+  const existing = document.getElementById('notLoggedNudge');
+  if (existing) existing.remove();
+  const today = todayISO();
+  const logged = findDaily(today);
+  if (logged) return; // already logged today — no nudge needed
+
+  const banner = document.createElement('div');
+  banner.id = 'notLoggedNudge';
+  banner.style.cssText = 'background:var(--yellow-dim);border:1px solid rgba(245,158,11,0.25);border-radius:var(--radius);padding:11px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;';
+  banner.innerHTML = `
+    <span style="font-size:13px;color:var(--text)">📝 You haven't logged today yet</span>
+    <button onclick="switchView('entry')" style="background:var(--yellow);color:#1a0e00;border:none;border-radius:var(--radius-sm);padding:6px 14px;font:600 12px var(--sans);cursor:pointer;white-space:nowrap;">Log today →</button>
+  `;
+  const dashSection = document.getElementById('dashboard');
+  if (dashSection) dashSection.insertBefore(banner, dashSection.firstChild);
+}
+
 function renderDashboard() {
   ensureYearSelectors();
   renderKpis();
   renderRecords();
+  renderNotLoggedNudge();
 
   const metric = document.getElementById('metricSelect').value;
   const y  = document.getElementById('yearSelect').value;
@@ -2019,13 +2039,14 @@ document.addEventListener('DOMContentLoaded', () => {
     r.readAsText(f, 'UTF-8');
   });
 
-  // Boot
+  // Boot — open on Dashboard (Option 3: smart default)
   ensureYearSelectors();
   updatePreview();
   updateSheetUI();
   loadSelectedDate();
   renderHistory();
   renderTodayReminder();
+  renderDashboard(); // Dashboard is now the default active view
 });
 
 /* Show a reminder banner on Daily Entry if today or tomorrow has events */

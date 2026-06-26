@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=18" />
+  <link rel="stylesheet" href="styles.css?v=19" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,16 +26,16 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V3.0 · build 18</span>
+    <span class="version-badge">V3.0 · build 19</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
     </div>
   </div>
   <nav>
-    <button class="nav-btn active" data-view="entry">Daily Entry</button>
+    <button class="nav-btn" data-view="entry">Daily Entry</button>
     <button class="nav-btn" data-view="finEntry">Finance Entry</button>
-    <button class="nav-btn" data-view="dashboard">Dashboard</button>
+    <button class="nav-btn active" data-view="dashboard">Dashboard</button>
     <button class="nav-btn" data-view="finDashboard">Finance Dashboard</button>
     <button class="nav-btn" data-view="history">History</button>
     <button class="nav-btn" data-view="import">Import / Export</button>
@@ -48,7 +48,7 @@
 <main>
 
   <!-- ── DAILY ENTRY ── -->
-  <section id="entry" class="view active">
+  <section id="entry" class="view">
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
         <div>
@@ -87,9 +87,9 @@
           </div>
 
           <div class="field-group"><label>Reading (pages)</label><input type="number" id="reading" step="1" /></div>
-          <div class="field-group"><label>TV series</label><input type="number" id="tv" step="0.1" /></div>
+          <div class="field-group"><label>Screen (episodes)</label><input type="number" id="tv" step="0.1" /></div>
 
-          <div class="field-group"><label>Movies</label><input type="number" id="movies" step="0.1" /></div>
+          <div class="field-group"><label>Movies / events</label><input type="number" id="movies" step="0.1" /></div>
           <div class="field-group"><label>Teeth (times)</label><input type="number" id="teeth" step="1" /></div>
           <div class="field-group"><label>Workout (min)</label><input type="number" id="workout" step="1" /></div>
           <div class="field-group"><label>Sleep (h)</label><input type="number" id="sleep" step="0.1" /></div>
@@ -244,7 +244,7 @@
   </section>
 
   <!-- ── DASHBOARD ── -->
-  <section id="dashboard" class="view">
+  <section id="dashboard" class="view active">
     <div class="panel dash-controls">
       <div class="field-group"><label>Year</label><select id="yearSelect"></select></div>
       <div class="field-group"><label>Compare with</label><select id="compareYearSelect"></select></div>
@@ -254,7 +254,7 @@
           <option value="newScore">New Score</option>
           <option value="score">Score (old)</option>
           <option value="prayTotal">Prayer total</option>
-          <option value="tvMovies">TV + Movies</option>
+          <option value="tvMovies">Screen (TV + Movies)</option>
           <option value="reading">Reading</option>
           <option value="sleep">Sleep</option>
           <option value="workout">Workout</option>
@@ -564,7 +564,7 @@
         </div>
 
         <div class="guide-card">
-          <div class="guide-header"><span class="guide-icon">📺</span><span class="guide-name">TV + Movies</span><span class="guide-unit">pieces/day</span></div>
+          <div class="guide-header"><span class="guide-icon">📺</span><span class="guide-name">Screen (TV + Movies)</span><span class="guide-unit">pieces/day</span></div>
           <div class="guide-rows">
             <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">&lt; 4</span><span class="guide-score">+1</span></div>
             <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">5 – 7</span><span class="guide-score">+0.5</span></div>
@@ -657,6 +657,6 @@
   </section>
 
 </main>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
