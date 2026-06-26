@@ -897,13 +897,40 @@ function preferredRows(rows) {
   const m=rows.filter(d=>d.type==='monthly');
   return m.length ? m : rows.filter(d=>d.type==='daily');
 }
+
+/* For a daily row, get the effective value for a metric.
+   If newScore/score isn't stored (common in imported daily data),
+   calculate it on the fly from the raw habit fields. */
+function effectiveVal(d, metric) {
+  if (metric === 'tvMovies') return tvMovies(d);
+  if (metric === 'newScore') {
+    const stored = parseNum(d.newScore);
+    if (stored !== null) return stored;
+    // Calculate from raw fields if not stored
+    if (d.type === 'daily' && (d.prayTotal!=null || d.reading!=null || d.sleep!=null)) {
+      return calcNewScore(d).total;
+    }
+    return null;
+  }
+  if (metric === 'score') {
+    const stored = parseNum(d.score);
+    if (stored !== null) return stored;
+    // Fall back to calculated newScore for old rows that only have raw habits
+    if (d.type === 'daily' && (d.prayTotal!=null || d.reading!=null || d.sleep!=null)) {
+      return calcNewScore(d).total;
+    }
+    return null;
+  }
+  return d[metric] !== undefined ? parseNum(d[metric]) : null;
+}
+
 function aggregate(rows, metric) {
   const pref = preferredRows(rows);
-  const vals = pref.map(d=>metric==='tvMovies'?tvMovies(d):d[metric]);
+  const vals = pref.map(d => effectiveVal(d, metric));
   let res = avg(vals);
   if (res===null) {
     const yr = rows.filter(d=>d.type==='yearly');
-    if (yr.length) res = avg(yr.map(d=>metric==='tvMovies'?tvMovies(d):d[metric]));
+    if (yr.length) res = avg(yr.map(d => effectiveVal(d, metric)));
   }
   return res;
 }
@@ -913,7 +940,8 @@ function monthlyValues(y, metric) {
     const mr = rows.filter(d=>Number(d.month)===i+1);
     if (!mr.length) return null;
     const mo = mr.filter(d=>d.type==='monthly');
-    return aggregate(mo.length?mo:mr.filter(d=>d.type==='daily'), metric);
+    const src = mo.length ? mo : mr.filter(d=>d.type==='daily');
+    return avg(src.map(d => effectiveVal(d, metric)));
   });
 }
 function lastDataMonth(y) {
@@ -1073,43 +1101,69 @@ const RECORD_METRICS = [
 
 function renderRecords() {
   const all = getData();
-  // Use monthly AVG rows as the source of truth — one pre-computed value per month,
-  // matching exactly what your Excel tracks. Daily entries are only used for
-  // the "best single day" note where available.
   const monthlyRows = all.filter(d => d.type === 'monthly' && d.year && d.month);
   const dailyRows   = all.filter(d => d.type === 'daily');
 
-  if (!monthlyRows.length) {
+  // Build a unified set of "monthly aggregates" — prefer pre-computed AVG rows,
+  // but fall back to computing from daily rows for any month not covered by AVGs.
+  const monthAggMap = {}; // key: "YYYY-MM" -> { year, month, vals: {metric: value} }
+
+  // First: add all monthly AVG rows
+  monthlyRows.forEach(row => {
+    const key = `${row.year}-${String(row.month).padStart(2,'0')}`;
+    if (!monthAggMap[key]) monthAggMap[key] = { year: row.year, month: row.month, source: 'avg', row };
+  });
+
+  // Second: compute monthly averages from daily rows for months not covered by AVGs
+  const dailyByMonth = {};
+  dailyRows.forEach(d => {
+    if (!d.year || !d.month) return;
+    const key = `${d.year}-${String(d.month).padStart(2,'0')}`;
+    if (!dailyByMonth[key]) dailyByMonth[key] = { year: d.year, month: d.month, rows: [] };
+    dailyByMonth[key].rows.push(d);
+  });
+  Object.entries(dailyByMonth).forEach(([key, {year, month, rows}]) => {
+    if (!monthAggMap[key]) {
+      // No AVG row for this month — create a computed aggregate
+      monthAggMap[key] = { year, month, source: 'computed', rows };
+    }
+  });
+
+  const allMonthAggs = Object.values(monthAggMap);
+
+  if (!allMonthAggs.length) {
     document.getElementById('recordsGrid').innerHTML =
-      '<p style="color:var(--muted);font-size:13px">No monthly average data found — import your Overall CSV to populate records.</p>';
+      '<p style="color:var(--muted);font-size:13px">No data found — import your CSV to populate records.</p>';
     return;
   }
 
   function monthLabel(y, m) { return `${MONTHS[m-1]} ${y}`; }
 
-  function fieldVal(row, field) {
-    if (field === 'tvMovies') {
-      const v = (num0(row.tv) + num0(row.movies));
-      return v > 0 ? v : null;
+  function aggVal(agg, field) {
+    if (agg.source === 'avg') return effectiveVal(agg.row, field);
+    // Computed from daily rows — average across the month
+    if (agg.rows && agg.rows.length) {
+      const vals = agg.rows.map(d => effectiveVal(d, field)).filter(v => v !== null);
+      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
     }
-    return parseNum(row[field]);
+    return null;
   }
 
   const cards = RECORD_METRICS.map(m => {
-    let bestVal = null, bestRow = null;
-    monthlyRows.forEach(row => {
-      const v = fieldVal(row, m.key);
+    let bestVal = null, bestAgg = null;
+    allMonthAggs.forEach(agg => {
+      const v = aggVal(agg, m.key);
       if (v === null) return;
       if (bestVal === null || (m.higher ? v > bestVal : v < bestVal)) {
-        bestVal = v; bestRow = row;
+        bestVal = v; bestAgg = agg;
       }
     });
-    if (bestVal === null || !bestRow) return null;
+    if (bestVal === null || !bestAgg) return null;
 
     // Best single day — from daily entries only (monthly AVGs have no single-day detail)
     let bestDayVal = null, bestDay = null;
     dailyRows.forEach(d => {
-      const v = fieldVal(d, m.key);
+      const v = effectiveVal(d, m.key);
       if (v === null) return;
       if (bestDayVal === null || (m.higher ? v > bestDayVal : v < bestDayVal)) {
         bestDayVal = v; bestDay = d;
@@ -1117,7 +1171,8 @@ function renderRecords() {
     });
 
     const valFmt = bestVal.toFixed(m.decimals) + (m.unit ? ' '+m.unit : '');
-    const when = monthLabel(bestRow.year, bestRow.month);
+    const when = monthLabel(bestAgg.year, bestAgg.month);
+    const sourceNote = bestAgg.source === 'computed' ? ' · calculated' : ' · monthly avg';
     const dayNote = bestDay
       ? `Best day: ${bestDayVal.toFixed(m.decimals)}${m.unit?' '+m.unit:''} on ${bestDay.date}`
       : '';
@@ -1126,7 +1181,7 @@ function renderRecords() {
       <div class="record-trophy">${m.icon}</div>
       <div class="record-metric">${m.label}</div>
       <div class="record-value">${valFmt}</div>
-      <div class="record-when">🏆 ${when} · monthly avg</div>
+      <div class="record-when">🏆 ${when}${sourceNote}</div>
       ${dayNote ? `<div class="record-note">${dayNote}</div>` : ''}
     </div>`;
   }).filter(Boolean);
