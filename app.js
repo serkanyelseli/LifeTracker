@@ -1407,79 +1407,74 @@ function renderFinDashKpis() {
 function renderFinDashCharts() {
   const y  = document.getElementById('finDashYearSelect').value;
   const cy = document.getElementById('finDashCompareSelect').value;
-  const view = document.getElementById('finDashViewSelect').value; // 'monthly' | 'yearly'
+  const view = document.getElementById('finDashViewSelect').value;
   const compareActive = !!cy && cy !== y;
 
-  const barOptions = {
-    responsive:true, maintainAspectRatio:true,
-    layout:{padding:{top:16}},
-    interaction:{mode:'index',intersect:false},
-    plugins:{
-      legend:{labels:{color:'#7a8ba8',font:{size:12,family:'Inter'},boxWidth:18}},
-      tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-        callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
-      datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
-        display: ctx => ctx.dataset.data[ctx.dataIndex] !== null }
-    },
-    scales:{
-      x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
-    }
-  };
+  // Helper: fresh chart options each time (avoids shared-reference mutation between charts)
+  function makeOpts(overrides={}) {
+    return {
+      responsive:true, maintainAspectRatio:true,
+      layout:{padding:{top:20}},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#7a8ba8',font:{size:12,family:'Inter'},boxWidth:18}},
+        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
+        datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
+          display: ctx => ctx.dataset.data[ctx.dataIndex] !== null }
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
+      },
+      ...overrides
+    };
+  }
 
   let labels, incomeSeries, allowanceSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
 
   if (view === 'yearly') {
     const yearly = finYearlyAggregate();
-    labels           = yearly.map(f => String(f.y));
-    incomeSeries     = yearly.map(f => f.income);
-    allowanceSeries  = yearly.map(f => f.allowanceIncome);
-    expDESeries      = yearly.map(f => f.expDE);
-    trSeries         = yearly.map(f => f.tr);
-    deCatRows        = yearly;
-    trMomSeries      = yearly.map(f => f.trMom);
-    trOthersSeries   = yearly.map(f => f.trOthers);
+    labels          = yearly.map(f => String(f.y));
+    incomeSeries    = yearly.map(f => f.income);
+    allowanceSeries = yearly.map(f => f.allowanceIncome);
+    expDESeries     = yearly.map(f => f.expDE);
+    trSeries        = yearly.map(f => f.tr);
+    deCatRows       = yearly;
+    trMomSeries     = yearly.map(f => f.trMom);
+    trOthersSeries  = yearly.map(f => f.trOthers);
     document.getElementById('finDashIncExpTitle').textContent = 'Income vs Expenses (k€) — all years';
-    document.getElementById('finDashNetTitle').textContent = 'Net cashflow (k€) — all years';
-    document.getElementById('finDashDECatTitle').textContent = 'Expenses DE — category totals, all years';
-    document.getElementById('finDashTRTitle').textContent = 'TR Payments — Mom vs Others, all years';
+    document.getElementById('finDashNetTitle').textContent    = 'Net cashflow (k€) — all years';
+    document.getElementById('finDashDECatTitle').textContent  = 'Expenses DE — category totals, all years';
+    document.getElementById('finDashTRTitle').textContent     = 'TR Payments — Mom vs Others, all years';
   } else {
-    const monthly    = finMonthlyForYear(y);
-    labels           = MONTHS;
-    incomeSeries     = monthly.map(m => m.income);
-    allowanceSeries  = monthly.map(m => m.allowanceIncome);
-    expDESeries      = monthly.map(m => m.expDE);
-    trSeries         = monthly.map(m => m.tr);
-    deCatRows        = monthly;
-    trMomSeries      = monthly.map(m => m.trMom);
-    trOthersSeries   = monthly.map(m => m.trOthers);
+    const monthly   = finMonthlyForYear(y);
+    labels          = MONTHS;
+    incomeSeries    = monthly.map(m => m.income);
+    allowanceSeries = monthly.map(m => m.allowanceIncome);
+    expDESeries     = monthly.map(m => m.expDE);
+    trSeries        = monthly.map(m => m.tr);
+    deCatRows       = monthly;
+    trMomSeries     = monthly.map(m => m.trMom);
+    trOthersSeries  = monthly.map(m => m.trOthers);
     document.getElementById('finDashIncExpTitle').textContent = `Income vs Expenses (k€) — ${y}`;
-    document.getElementById('finDashNetTitle').textContent = `Net cashflow (k€) — ${y}`;
-    document.getElementById('finDashDECatTitle').textContent = `Expenses DE — category breakdown, ${y}`;
-    document.getElementById('finDashTRTitle').textContent = `TR Payments — Mom vs Others, ${y}`;
+    document.getElementById('finDashNetTitle').textContent    = `Net cashflow (k€) — ${y}`;
+    document.getElementById('finDashDECatTitle').textContent  = `Expenses DE — category breakdown, ${y}`;
+    document.getElementById('finDashTRTitle').textContent     = `TR Payments — Mom vs Others, ${y}`;
   }
 
-  // ── Chart 1: Income vs Expenses ──
-  // Salary + Allowance stacked together (income stack), expenses separate
+  // ── Chart 1: Income vs Expenses (salary + allowance side-by-side, no stacking) ──
   destroyChart('finDashIncExp');
-  const incExpDatasets = [
-    { ...barSeries('Salary k€',      incomeSeries,    C.green),  stack: 'income' },
-    { ...barSeries('Allowance k€',   allowanceSeries, C.teal),   stack: 'income' }, // teal — clearly distinct from salary green
-    { ...barSeries('Expenses DE k€', expDESeries,     C.red),    stack: 'expenses' },
-    { ...barSeries('TR Payments k€', trSeries,        C.yellow), stack: 'expenses' },
-  ];
-  if (view === 'monthly' && compareActive) {
-    const cyMonthly = finMonthlyForYear(cy);
-    incExpDatasets.push({ ...barSeries(`Salary k€ (${cy})`, cyMonthly.map(m=>m.income), C.green+'80') });
-  }
-  const stackedBarOptions = {
-    ...barOptions,
-    scales: {
-      x: { ...barOptions.scales.x, stacked: true },
-      y: { ...barOptions.scales.y, stacked: false }, // don't stack income vs expenses on y-axis
-    }
-  };
-  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: stackedBarOptions });
+  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { ...barSeries('Salary k€',      incomeSeries,    C.green)  },
+      { ...barSeries('Allowance k€',   allowanceSeries, C.teal)   },
+      { ...barSeries('Expenses DE k€', expDESeries,     C.red)    },
+      { ...barSeries('TR Payments k€', trSeries,        C.yellow) },
+    ]},
+    options: makeOpts()
+  });
 
   // ── Chart 2: Net cashflow ──
   destroyChart('finDashNet');
@@ -1503,9 +1498,7 @@ function renderFinDashCharts() {
       }),
       borderRadius:4, borderSkipped:false
     }]},
-    options:{
-      responsive:true, maintainAspectRatio:true,
-      layout:{padding:{top:20}},
+    options: makeOpts({
       plugins:{
         legend:{display:false},
         tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
@@ -1517,44 +1510,43 @@ function renderFinDashCharts() {
         },
         datalabels:{ ...valueLabel(2), align:'end', anchor:'end', offset:2,
           display: ctx => ctx.parsed.y !== null }
-      },
-      scales:{
-        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
       }
-    }
+    })
   });
 
-  // ── Chart 3: DE category breakdown (stacked bar) ──
+  // ── Chart 3: DE category breakdown (stacked) ──
   destroyChart('finDashDECat');
-  const deCatDatasets = EXP_DE_PARTS.map((cat, i) => ({
-    type:'bar', label: DE_CAT_LABELS[cat],
-    data: deCatRows.map(r => r[cat]),
-    backgroundColor: DE_CAT_COLORS[i]+'cc',
-    borderRadius: 2, borderSkipped:false,
-  }));
   charts['finDashDECat'] = new Chart(document.getElementById('finDashDECatChart'), {
     type:'bar',
-    data:{ labels, datasets: deCatDatasets },
-    options: {
-      ...barOptions,
-      plugins: { ...barOptions.plugins, datalabels: { display:false } }, // too cluttered stacked
-      scales: { x:{ ...barOptions.scales.x, stacked:true }, y:{ ...barOptions.scales.y, stacked:true } }
-    }
+    data:{ labels, datasets: EXP_DE_PARTS.map((cat, i) => ({
+      type:'bar', label: DE_CAT_LABELS[cat],
+      data: deCatRows.map(r => r[cat]),
+      backgroundColor: DE_CAT_COLORS[i]+'cc',
+      borderRadius:2, borderSkipped:false,
+    }))},
+    options: makeOpts({
+      plugins:{
+        legend:{labels:{color:'#7a8ba8',font:{size:11,family:'Inter'},boxWidth:14}},
+        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
+        datalabels:{display:false}
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}},stacked:true},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}},stacked:true}
+      }
+    })
   });
 
   // ── Chart 4: TR Mom vs Others ──
   destroyChart('finDashTR');
   charts['finDashTR'] = new Chart(document.getElementById('finDashTRChart'), {
     type:'bar',
-    data:{
-      labels,
-      datasets:[
-        { ...barSeries('Mom k€', trMomSeries, C.blue) },
-        { ...barSeries('Others k€', trOthersSeries, C.purple) },
-      ]
-    },
-    options: barOptions
+    data:{ labels, datasets:[
+      { ...barSeries('Mom k€',    trMomSeries,    C.blue)   },
+      { ...barSeries('Others k€', trOthersSeries, C.purple) },
+    ]},
+    options: makeOpts()
   });
 }
 
