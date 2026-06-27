@@ -1482,48 +1482,43 @@ function renderFinDashCharts() {
   const netSeries = labels.map((_, i) => {
     const inc = incomeSeries[i], al = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i];
     if (inc==null && al==null && de==null && tr==null) return null;
-    const totalInc = (inc ?? 0) + (al ?? 0);
-    return round3(totalInc - (de ?? 0) - (tr ?? 0));
+    return round3(((inc??0)+(al??0)) - (de??0) - (tr??0));
   });
-  const netIncomplete = labels.map((_, i) => {
-    const hasIncome = incomeSeries[i]!=null || allowanceSeries[i]!=null;
-    return !hasIncome || expDESeries[i]==null || trSeries[i]==null;
-  });
-  // Use per-bar color via a dataset per sign to avoid array backgroundColor issues
-  const netPos = netSeries.map(v => (v!=null && v>=0) ? v : null);
-  const netNeg = netSeries.map(v => (v!=null && v<0)  ? v : null);
-  const netPartialPos = netSeries.map((v,i) => (v!=null && v>=0 && netIncomplete[i]) ? v : null);
-  const netPartialNeg = netSeries.map((v,i) => (v!=null && v<0  && netIncomplete[i]) ? v : null);
-  const netChartOpts = {
-    responsive:true, maintainAspectRatio:true,
-    layout:{padding:{top:20}},
-    plugins:{
-      legend:{display:false},
-      tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-        callbacks:{ label: ctx => {
-          const raw = netSeries[ctx.dataIndex];
-          const partial = netIncomplete[ctx.dataIndex];
-          if (raw==null) return ' No data';
-          return partial ? ` Net: ${raw.toFixed(2)} k€ (partial estimate)` : ` Net: ${raw.toFixed(2)} k€`;
-        }}
-      },
-      datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
-        display: ctx => ctx.parsed.y !== null && ctx.parsed.y !== 0 }
-    },
-    scales:{
-      x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
-    }
-  };
+  const netIncomplete = labels.map((_, i) =>
+    (incomeSeries[i]==null && allowanceSeries[i]==null) || expDESeries[i]==null || trSeries[i]==null
+  );
   charts['finDashNet'] = new Chart(document.getElementById('finDashNetChart'), {
     type:'bar',
-    data:{ labels, datasets:[
-      { label:'Net k€ (+)', data:netPos,        backgroundColor:C.green+'cc', borderRadius:4, borderSkipped:false },
-      { label:'Net k€ (-)', data:netNeg,        backgroundColor:C.red+'cc',   borderRadius:4, borderSkipped:false },
-      { label:'Partial (+)',data:netPartialPos,  backgroundColor:C.green+'55', borderRadius:4, borderSkipped:false },
-      { label:'Partial (-)',data:netPartialNeg,  backgroundColor:C.red+'55',   borderRadius:4, borderSkipped:false },
-    ]},
-    options: netChartOpts
+    data:{ labels, datasets:[{
+      label:'Net k€',
+      data: netSeries,
+      backgroundColor: netSeries.map((v,i) => {
+        if (v==null) return 'transparent';
+        const base = v>=0 ? C.green : C.red;
+        return netIncomplete[i] ? base+'66' : base+'cc';
+      }),
+      borderRadius:4, borderSkipped:false
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      layout:{padding:{top:20}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+          callbacks:{ label: ctx => {
+            const v = ctx.parsed.y;
+            if (v==null) return ' No data';
+            return netIncomplete[ctx.dataIndex] ? ` Net: ${v.toFixed(2)} k€ (partial)` : ` Net: ${v.toFixed(2)} k€`;
+          }}
+        },
+        datalabels:{ ...valueLabel(2), align:'end', anchor:'end', offset:2,
+          display: ctx => ctx.parsed.y !== null }
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
+      }
+    }
   });
 
   // ── Chart 3: DE category breakdown (stacked bar) ──
@@ -1638,7 +1633,7 @@ function importCsvText(text) {
 /* ── Finance CSV import — expects a clean header row matching FIN_EXPORT_COLS,
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
-const FIN_NUMERIC_COLS = ['year','monthNum','income','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
