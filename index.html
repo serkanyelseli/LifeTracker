@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V3.2 · build 23</span>
+    <span class="version-badge">V3.2 · build 25</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -315,8 +315,8 @@
 
     <div class="chart-grid">
       <div class="panel">
-        <div class="panel-title" id="finDashDECatTitle">Expenses DE — category breakdown</div>
-        <div class="chart-wrap"><canvas id="finDashDECatChart"></canvas></div>
+        <div class="panel-title" id="finDashSalaryTitle">Salary vs Total Income (k€) — allowance delta</div>
+        <div class="chart-wrap"><canvas id="finDashSalaryChart"></canvas></div>
       </div>
       <div class="panel">
         <div class="panel-title" id="finDashTRTitle">TR Payments — Mom vs Others</div>
@@ -324,9 +324,15 @@
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">Cumulative cashflow since 2008 (k€)</div>
-      <div class="chart-wrap" style="height:220px"><canvas id="finDashCumulChart"></canvas></div>
+    <div class="chart-grid">
+      <div class="panel">
+        <div class="panel-title" id="finDashDECatTitle">Expenses DE — category breakdown</div>
+        <div class="chart-wrap"><canvas id="finDashDECatChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Cumulative cashflow since 2008 (k€)</div>
+        <div style="position:relative;height:240px"><canvas id="finDashCumulChart"></canvas></div>
+      </div>
     </div>
   </section>
 

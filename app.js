@@ -1450,31 +1450,42 @@ function renderFinDashCharts() {
     document.getElementById('finDashTRTitle').textContent = `TR Payments — Mom vs Others, ${y}`;
   }
 
-  // ── Chart 1: Income vs Expenses ──
-  // Salary and Allowance are stacked into one bar (green bottom, teal top).
-  // Expenses DE and TR remain as separate side-by-side bars.
-  // Using named stacks: 'income' groups salary+allowance, leaving DE and TR ungrouped.
+  // ── Chart 1: Income vs Expenses — total income (salary + allowance) as one bar ──
   destroyChart('finDashIncExp');
+  const totalIncomeSeries = labels.map((_, i) => {
+    const sal = incomeSeries[i] ?? 0;
+    const al  = allowanceSeries[i] ?? 0;
+    return (incomeSeries[i]==null && allowanceSeries[i]==null) ? null : round3(sal + al);
+  });
   const incExpDatasets = [
-    { ...barSeries('Salary k€',    incomeSeries,    C.green), stack: 'income' },
-    { ...barSeries('Allowance k€', allowanceSeries, C.teal),  stack: 'income' },
-    { ...barSeries('Expenses DE k€', expDESeries,   C.red)    },
-    { ...barSeries('TR Payments k€', trSeries,      C.yellow) },
+    { ...barSeries('Total Income k€', totalIncomeSeries, C.green) },
+    { ...barSeries('Expenses DE k€',  expDESeries,       C.red)   },
+    { ...barSeries('TR Payments k€',  trSeries,          C.yellow) },
   ];
   if (view === 'monthly' && compareActive) {
     const cyMonthly = finMonthlyForYear(cy);
-    incExpDatasets.push({ ...barSeries(`Salary k€ (${cy})`,    cyMonthly.map(m=>m.income),         C.green+'80'), stack: `income_${cy}` });
-    incExpDatasets.push({ ...barSeries(`Allowance k€ (${cy})`, cyMonthly.map(m=>m.allowanceIncome), C.teal+'80'),  stack: `income_${cy}` });
+    const cyTotal = cyMonthly.map(m =>
+      (m.income==null && m.allowanceIncome==null) ? null : round3((m.income??0)+(m.allowanceIncome??0))
+    );
+    incExpDatasets.push({ ...barSeries(`Total Income k€ (${cy})`, cyTotal, C.green+'80') });
   }
-  // Stacked scales only for this chart — created fresh, not mutating barOptions
-  const incExpOptions = {
-    ...barOptions,
-    scales: {
-      x: { ...barOptions.scales.x, stacked: true },
-      y: { ...barOptions.scales.y, stacked: false }
-    }
-  };
-  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: incExpOptions });
+  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), {
+    type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions
+  });
+
+  // ── Chart 1b: Salary vs Total Income — shows allowance delta visually ──
+  destroyChart('finDashSalary');
+  document.getElementById('finDashSalaryTitle').textContent =
+    view === 'yearly' ? 'Salary vs Total Income (k€) — allowance delta, all years'
+                      : `Salary vs Total Income (k€) — allowance delta, ${y}`;
+  charts['finDashSalary'] = new Chart(document.getElementById('finDashSalaryChart'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { ...barSeries('Salary only k€',  incomeSeries,       C.green) },
+      { ...barSeries('Total Income k€', totalIncomeSeries,  C.teal)  },
+    ]},
+    options: barOptions
+  });
 
   // ── Chart 2: Net cashflow ──
   // Treat a missing component as 0 rather than requiring Income+ExpDE+TR to
@@ -1574,7 +1585,8 @@ function renderFinDashCharts() {
       borderWidth: 2,
     }]},
     options:{
-      responsive:true, maintainAspectRatio:true,
+      responsive:true,
+      maintainAspectRatio:false,
       layout:{padding:{top:16}},
       plugins:{
         legend:{display:false},
