@@ -1565,15 +1565,21 @@ function renderFinDashCharts() {
 }
 
 function renderFinDashboard() {
+  // Capture current selection BEFORE ensureFinDashSelectors rebuilds the dropdowns
+  const prevYear = document.getElementById('finDashYearSelect')?.value || '';
+  const prevCompare = document.getElementById('finDashCompareSelect')?.value || '';
+  const prevView = document.getElementById('finDashViewSelect')?.value || 'monthly';
   ensureFinDashSelectors();
+  // Restore selection if it was valid (ensureFinDashSelectors may have reset it)
+  const sel = document.getElementById('finDashYearSelect');
+  if (prevYear && sel && [...sel.options].some(o => o.value == prevYear)) sel.value = prevYear;
   renderFinDashKpis();
   renderFinDashCharts();
-  // Force charts to resize after render in case canvas was previously hidden
-  requestAnimationFrame(() => {
+  setTimeout(() => {
     ['finDashIncExp','finDashNet','finDashDECat','finDashTR'].forEach(id => {
       if (charts[id]) charts[id].resize();
     });
-  });
+  }, 50);
 }
 
 /* ════════════════════════════════════════════
