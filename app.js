@@ -868,7 +868,11 @@ function switchView(v) {
   document.getElementById(v).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   if (v==='dashboard') renderDashboard();
-  else if (v==='finDashboard') renderFinDashboard();
+  else if (v==='finDashboard') {
+    // Defer one frame so the section is visible and has real dimensions
+    // before Chart.js tries to measure the canvas elements
+    requestAnimationFrame(() => renderFinDashboard());
+  }
   else if (v==='history') renderHistory();
   else if (v==='calendar') renderCalendar();
   // 'guide' is static HTML — no render needed
@@ -1558,6 +1562,12 @@ function renderFinDashboard() {
   ensureFinDashSelectors();
   renderFinDashKpis();
   renderFinDashCharts();
+  // Force charts to resize after render in case canvas was previously hidden
+  requestAnimationFrame(() => {
+    ['finDashIncExp','finDashNet','finDashDECat','finDashTR'].forEach(id => {
+      if (charts[id]) charts[id].resize();
+    });
+  });
 }
 
 /* ════════════════════════════════════════════
