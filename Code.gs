@@ -17,7 +17,7 @@ const LOG_HEADERS = ['type','label','date','year','month','day','prayTotal',
   'reading','tv','movies','teeth','workout','sleep','weightKg','targetKg','deltaKg','water','german',
   'nutrition','bonusMalus','newScore','highlights'];
 
-const FIN_HEADERS = ['type','month','year','monthNum','income','expDE','expTR',
+const FIN_HEADERS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
   'expHousehold','expSeko','expCiko','expYaz','expPotisko','expTransport','expGrocery','expEatOut','expOthers',
   'trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious',
   'trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious','notes'];
