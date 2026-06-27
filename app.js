@@ -1455,36 +1455,43 @@ function renderFinDashCharts() {
     document.getElementById('finDashTRTitle').textContent = `TR Payments — Mom vs Others, ${y}`;
   }
 
-  // ── Chart 1: Income vs Expenses — allowance shown as a separate stacked bar on top of salary ──
+  // ── Chart 1: Income vs Expenses ──
+  // Salary + Allowance stacked together (income stack), expenses separate
   destroyChart('finDashIncExp');
   const incExpDatasets = [
-    { ...barSeries('Salary k€',    incomeSeries,    C.green) },
-    { ...barSeries('Allowance k€', allowanceSeries, '#34d399'), stack: 'income' }, // teal-green, stacked with salary
-    { ...barSeries('Expenses DE k€', expDESeries,   C.red) },
-    { ...barSeries('TR Payments k€', trSeries,      C.yellow) },
+    { ...barSeries('Salary k€',      incomeSeries,    C.green),  stack: 'income' },
+    { ...barSeries('Allowance k€',   allowanceSeries, C.teal),   stack: 'income' }, // teal — clearly distinct from salary green
+    { ...barSeries('Expenses DE k€', expDESeries,     C.red),    stack: 'expenses' },
+    { ...barSeries('TR Payments k€', trSeries,        C.yellow), stack: 'expenses' },
   ];
-  // stack salary + allowance together visually
-  incExpDatasets[0].stack = 'income';
-  incExpDatasets[1].stack = 'income';
   if (view === 'monthly' && compareActive) {
     const cyMonthly = finMonthlyForYear(cy);
     incExpDatasets.push({ ...barSeries(`Salary k€ (${cy})`, cyMonthly.map(m=>m.income), C.green+'80') });
   }
-  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions });
+  const stackedBarOptions = {
+    ...barOptions,
+    scales: {
+      x: { ...barOptions.scales.x, stacked: true },
+      y: { ...barOptions.scales.y, stacked: false }, // don't stack income vs expenses on y-axis
+    }
+  };
+  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: stackedBarOptions });
 
   // ── Chart 2: Net cashflow ──
-  // Treat a missing component as 0 rather than requiring Income+ExpDE+TR to
-  // all be present — otherwise years with Income-only data (no DE detail yet)
-  // would show no bar at all, which is misleading since we DO know the net
-  // contribution from what we have. Years with truly nothing show no bar.
+  // Total income (salary + allowance) minus all expenses.
+  // Missing components treated as 0 so partial years still show a bar.
+  // Years with truly no data at all show nothing.
   destroyChart('finDashNet');
   const netSeries = labels.map((_, i) => {
     const inc = incomeSeries[i], al = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i];
-    const totalInc = (inc ?? 0) + (al ?? 0);
     if (inc==null && al==null && de==null && tr==null) return null;
+    const totalInc = (inc ?? 0) + (al ?? 0);
     return round3(totalInc - (de ?? 0) - (tr ?? 0));
   });
-  const netIncomplete = labels.map((_, i) => (incomeSeries[i]==null && allowanceSeries[i]==null) || expDESeries[i]==null || trSeries[i]==null);
+  const netIncomplete = labels.map((_, i) => {
+    const hasIncome = incomeSeries[i]!=null || allowanceSeries[i]!=null;
+    return !hasIncome || expDESeries[i]==null || trSeries[i]==null;
+  });
   const netColors = netSeries.map((v,i) => {
     if (v==null) return '#444';
     const base = v>=0 ? C.green : C.red;
