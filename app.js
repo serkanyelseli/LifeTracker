@@ -27,9 +27,9 @@ const EXP_DE_PARTS = ['expHousehold','expSeko','expCiko','expYaz','expPotisko','
 const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious'];
 const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
 const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
-const FIN_ENTRY_FIELDS = ['month','income','allowanceIncome','expDE','expTR','notes',
+const FIN_ENTRY_FIELDS = ['month','income','expDE','expTR','notes',
   ...EXP_DE_PARTS, ...EXP_TR_PARTS];
-const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
+const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','expDE','expTR',
   ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'notes'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
@@ -135,24 +135,7 @@ function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) |
 function setData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
 const FIN_STORAGE_KEY = 'serkanLifeTrackerV3_finance';
-function getFinData() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]');
-    // Sanitize: ensure all numeric fields are actually numbers, not strings
-    // (can happen if data was imported before FIN_NUMERIC_COLS was complete)
-    const numFields = ['year','monthNum','income','allowanceIncome','expDE','expTR',
-      ...EXP_DE_PARTS, ...EXP_TR_PARTS];
-    return raw.map(r => {
-      numFields.forEach(f => {
-        if (r[f] !== null && r[f] !== undefined && r[f] !== '') {
-          const n = Number(r[f]);
-          if (!isNaN(n)) r[f] = n;
-        }
-      });
-      return r;
-    });
-  } catch(e) { return []; }
-}
+function getFinData() { try { return JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]'); } catch(e) { return []; } }
 function setFinData(d) { localStorage.setItem(FIN_STORAGE_KEY, JSON.stringify(d)); }
 function getSheetId() { return localStorage.getItem(SHEET_ID_KEY) || ''; }
 function setSheetId(id) { localStorage.setItem(SHEET_ID_KEY, id); }
@@ -433,14 +416,13 @@ function round3(n) { return Math.round(n * 1000) / 1000; }
 
 
 function getFinFormEntry() {
-  const month = document.getElementById('finMonth').value;
+  const month = document.getElementById('finMonth').value; // "YYYY-MM"
   if (!month) return null;
   const [y, m] = month.split('-').map(Number);
   const e = {
-    type: 'daily-fin',
+    type: 'daily-fin', // monthly real entry, distinct from seeded 'monthly'/'yearly'
     month, year: y, monthNum: m,
-    income:          parseNum(document.getElementById('finIncome').value),
-    allowanceIncome: parseNum(document.getElementById('finAllowanceIncome').value),
+    income: parseNum(document.getElementById('finIncome').value),
     expDE: parseNum(document.getElementById('finExpDE').value),
     expTR: parseNum(document.getElementById('finExpTR').value),
     notes: document.getElementById('finNotes').value || '',
@@ -451,11 +433,10 @@ function getFinFormEntry() {
 }
 
 function fillFinForm(e) {
-  document.getElementById('finIncome').value          = (e && e.income!=null)          ? e.income          : '';
-  document.getElementById('finAllowanceIncome').value = (e && e.allowanceIncome!=null) ? e.allowanceIncome : '';
-  document.getElementById('finExpDE').value           = (e && e.expDE!=null)           ? e.expDE           : '';
-  document.getElementById('finExpTR').value           = (e && e.expTR!=null)           ? e.expTR           : '';
-  document.getElementById('finNotes').value           = (e && e.notes) ? e.notes : '';
+  document.getElementById('finIncome').value = (e && e.income!=null) ? e.income : '';
+  document.getElementById('finExpDE').value  = (e && e.expDE!=null)  ? e.expDE  : '';
+  document.getElementById('finExpTR').value  = (e && e.expTR!=null)  ? e.expTR  : '';
+  document.getElementById('finNotes').value  = (e && e.notes) ? e.notes : '';
   EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
   EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
   const hasDEParts = e && EXP_DE_PARTS.some(f => e[f] != null);
@@ -885,11 +866,7 @@ function switchView(v) {
   document.getElementById(v).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   if (v==='dashboard') renderDashboard();
-  else if (v==='finDashboard') {
-    // Defer one frame so the section is visible and has real dimensions
-    // before Chart.js tries to measure the canvas elements
-    requestAnimationFrame(() => renderFinDashboard());
-  }
+  else if (v==='finDashboard') renderFinDashboard();
   else if (v==='history') renderHistory();
   else if (v==='calendar') renderCalendar();
   // 'guide' is static HTML — no render needed
@@ -1283,7 +1260,7 @@ function round1(n) { return Math.round(n*10)/10; }
    'yearly' row for years with no real monthly data at all. Includes DE
    category sums and TR Mom/Others split for the dedicated charts. */
 function sumField(rows, k) {
-  const vals = rows.map(d => parseNum(d[k])).filter(v => v!=null);
+  const vals = rows.map(d=>d[k]).filter(v=>v!=null);
   return vals.length ? vals.reduce((a,b)=>a+b,0) : null;
 }
 function finYearlyAggregate() {
@@ -1293,27 +1270,23 @@ function finYearlyAggregate() {
     const monthly = data.filter(d => d.year===y && d.type==='daily-fin');
     const seededYear = data.find(d => d.year===y && d.type==='yearly');
     if (monthly.length) {
-      const row = {
-        y,
-        income:          sumField(monthly,'income'),
-        allowanceIncome: sumField(monthly,'allowanceIncome'),
-        expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR')
-      };
+      const row = { y, income: sumField(monthly,'income'), expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR') };
       EXP_DE_PARTS.forEach(c => row[c] = sumField(monthly, c));
-      const momSum    = sumField(monthly, 'trMomVarious');
+      const momSum = sumField(monthly, 'trMomVarious');
       const othersSum = sumField(monthly, 'trOthersVarious');
-      const momExtra    = TR_MOM_PARTS.filter(f=>f!=='trMomVarious').reduce((s,f)=>{ const v=sumField(monthly,f); return v!=null ? s+v : s; }, 0);
+      // Mom/Others totals also include the named sub-fields if present (real entries, not just estimates)
+      const momExtra = TR_MOM_PARTS.filter(f=>f!=='trMomVarious').reduce((s,f)=>{ const v=sumField(monthly,f); return v!=null ? s+v : s; }, 0);
       const othersExtra = TR_OTHERS_PARTS.filter(f=>f!=='trOthersVarious').reduce((s,f)=>{ const v=sumField(monthly,f); return v!=null ? s+v : s; }, 0);
-      row.trMom    = (momSum ?? 0) + momExtra || null;
+      row.trMom = (momSum ?? 0) + momExtra || null;
       row.trOthers = (othersSum ?? 0) + othersExtra || null;
       return row;
     }
     if (seededYear) {
-      const row = { y, income: seededYear.income, allowanceIncome: null, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null };
+      const row = { y, income: seededYear.income, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null };
       EXP_DE_PARTS.forEach(c => row[c] = null);
       return row;
     }
-    const row = { y, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null };
+    const row = { y, income: null, expDE: null, tr: null, trMom: null, trOthers: null };
     EXP_DE_PARTS.forEach(c => row[c] = null);
     return row;
   });
@@ -1324,20 +1297,20 @@ function finMonthlyForYear(y) {
   const data = getFinData();
   return Array.from({length:12}, (_,i) => {
     const m = i+1;
-    const real   = data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='daily-fin');
+    const real = data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='daily-fin');
     const seeded = !real ? data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='monthly') : null;
     const src = real || seeded;
     if (!src) {
-      const row = { m, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null };
+      const row = { m, income: null, expDE: null, tr: null, trMom: null, trOthers: null };
       EXP_DE_PARTS.forEach(c => row[c] = null);
       return row;
     }
-    const row = { m, income: src.income, allowanceIncome: src.allowanceIncome ?? null, expDE: src.expDE, tr: src.expTR };
+    const row = { m, income: src.income, expDE: src.expDE, tr: src.expTR };
     EXP_DE_PARTS.forEach(c => row[c] = src[c] ?? null);
-    const momExtra    = TR_MOM_PARTS.reduce((s,f)=>{ const v=parseNum(src[f]); return v!=null ? s+v : s; }, 0);
-    const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=parseNum(src[f]); return v!=null ? s+v : s; }, 0);
-    row.trMom    = momExtra > 0 ? momExtra : null;
-    row.trOthers = othersExtra > 0 ? othersExtra : null;
+    const momExtra = TR_MOM_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
+    const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
+    row.trMom = momExtra || null;
+    row.trOthers = othersExtra || null;
     return row;
   });
 }
@@ -1371,27 +1344,16 @@ function renderFinDashKpis() {
   const b  = compareActive ? finDataForYear(cy) : null;
   if (!a) { document.getElementById('finDashKpiGrid').innerHTML=''; return; }
 
-  // Total income = salary + allowance (where available)
-  function totalIncome(row) {
-    if (!row) return null;
-    const s = row.income ?? 0;
-    const al = row.allowanceIncome ?? 0;
-    return (row.income==null && row.allowanceIncome==null) ? null : round3(s + al);
-  }
-
   function calcNet(row) {
-    if (!row || (row.income==null && row.allowanceIncome==null && row.expDE==null && row.tr==null)) return { net:null, partial:false };
-    const total = totalIncome(row) ?? 0;
-    const partial = (row.income==null && row.allowanceIncome==null) || row.expDE==null || row.tr==null;
-    const net = total - (row.expDE ?? 0) - (row.tr ?? 0);
+    if (!row || (row.income==null && row.expDE==null && row.tr==null)) return { net:null, partial:false };
+    const partial = row.income==null || row.expDE==null || row.tr==null;
+    const net = (row.income ?? 0) - (row.expDE ?? 0) - (row.tr ?? 0);
     return { net: round3(net), partial };
   }
-  const totalA = totalIncome(a);
-  const totalB = totalIncome(b);
   const { net:netA, partial:partialA } = calcNet(a);
   const { net:netB } = calcNet(b);
-  const savingsA = (totalA && netA!=null) ? (netA/totalA*100) : null;
-  const savingsB = (totalB && netB!=null) ? (netB/totalB*100) : null;
+  const savingsA = (a.income && netA!=null) ? (netA/a.income*100) : null;
+  const savingsB = (b && b.income && netB!=null) ? (netB/b.income*100) : null;
 
   function finCard(title, valA, valB, unit='k€', lowerBetter=false, decimals=2, partialFlag=false) {
     const v = valA!=null ? fmt(valA, decimals)+' '+unit : '—';
@@ -1403,7 +1365,7 @@ function renderFinDashKpis() {
         : trivial ? `~${(delta>=0?'+':'')+fmt(delta,decimals)} (≈same) vs ${cy}`
         : `${(delta>=0?'+':'')+fmt(delta,decimals)} vs ${cy}`)
       : 'Single year';
-    const partialTag = partialFlag ? `<span class="partial-tag" title="One or more components missing for part of this period">partial</span>` : '';
+    const partialTag = partialFlag ? `<span class="partial-tag" title="One or more components (Income/Expenses DE/TR) missing for part of this period">partial</span>` : '';
     return `<div class="fin-card">
       <div class="fin-title">${title} · ${y}${partialTag}</div>
       <div class="fin-value">${v}</div>
@@ -1412,158 +1374,149 @@ function renderFinDashKpis() {
   }
 
   document.getElementById('finDashKpiGrid').innerHTML =
-    finCard('Salary Income',     a.income,          b?.income,          'k€', false) +
-    finCard('Allowance Income',  a.allowanceIncome,  b?.allowanceIncome, 'k€', false) +
-    finCard('Total Income',      totalA,             totalB,             'k€', false) +
-    finCard('Expenses DE',       a.expDE,            b?.expDE,           'k€', true)  +
-    finCard('TR Payments',       a.tr,               b?.tr,              'k€', true)  +
-    finCard('Net Cashflow',      netA,               netB,               'k€', false, 2, partialA) +
-    finCard('Savings Rate',      savingsA,           savingsB,           '%',  false, 1, partialA);
+    finCard('Income',           a.income, b?.income, 'k€', false) +
+    finCard('Expenses DE',      a.expDE,  b?.expDE,  'k€', true)  +
+    finCard('TR Payments',      a.tr,     b?.tr,      'k€', true)  +
+    finCard('Net Cashflow',     netA,     netB,       'k€', false, 2, partialA) +
+    finCard('Savings Rate',     savingsA, savingsB,   '%',  false, 1, partialA);
 }
 
 function renderFinDashCharts() {
   const y  = document.getElementById('finDashYearSelect').value;
   const cy = document.getElementById('finDashCompareSelect').value;
-  const view = document.getElementById('finDashViewSelect').value;
+  const view = document.getElementById('finDashViewSelect').value; // 'monthly' | 'yearly'
   const compareActive = !!cy && cy !== y;
 
-  // Helper: fresh chart options each time (avoids shared-reference mutation between charts)
-  function makeOpts(overrides={}) {
-    return {
-      responsive:true, maintainAspectRatio:true,
-      layout:{padding:{top:20}},
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{labels:{color:'#7a8ba8',font:{size:12,family:'Inter'},boxWidth:18}},
-        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
-        datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
-          display: ctx => ctx.dataset.data[ctx.dataIndex] !== null }
-      },
-      scales:{
-        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
-      },
-      ...overrides
-    };
-  }
+  const barOptions = {
+    responsive:true, maintainAspectRatio:true,
+    layout:{padding:{top:16}},
+    interaction:{mode:'index',intersect:false},
+    plugins:{
+      legend:{labels:{color:'#7a8ba8',font:{size:12,family:'Inter'},boxWidth:18}},
+      tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+        callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
+      datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
+        display: ctx => ctx.dataset.data[ctx.dataIndex] !== null }
+    },
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
+    }
+  };
 
-  let labels, incomeSeries, allowanceSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
+  let labels, incomeSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
 
   if (view === 'yearly') {
     const yearly = finYearlyAggregate();
-    labels          = yearly.map(f => String(f.y));
-    incomeSeries    = yearly.map(f => f.income);
-    allowanceSeries = yearly.map(f => f.allowanceIncome);
-    expDESeries     = yearly.map(f => f.expDE);
-    trSeries        = yearly.map(f => f.tr);
-    deCatRows       = yearly;
-    trMomSeries     = yearly.map(f => f.trMom);
-    trOthersSeries  = yearly.map(f => f.trOthers);
+    labels = yearly.map(f => String(f.y));
+    incomeSeries = yearly.map(f => f.income);
+    expDESeries  = yearly.map(f => f.expDE);
+    trSeries     = yearly.map(f => f.tr);
+    deCatRows    = yearly;
+    trMomSeries    = yearly.map(f => f.trMom);
+    trOthersSeries = yearly.map(f => f.trOthers);
     document.getElementById('finDashIncExpTitle').textContent = 'Income vs Expenses (k€) — all years';
-    document.getElementById('finDashNetTitle').textContent    = 'Net cashflow (k€) — all years';
-    document.getElementById('finDashDECatTitle').textContent  = 'Expenses DE — category totals, all years';
-    document.getElementById('finDashTRTitle').textContent     = 'TR Payments — Mom vs Others, all years';
+    document.getElementById('finDashNetTitle').textContent = 'Net cashflow (k€) — all years';
+    document.getElementById('finDashDECatTitle').textContent = 'Expenses DE — category totals, all years';
+    document.getElementById('finDashTRTitle').textContent = 'TR Payments — Mom vs Others, all years';
   } else {
-    const monthly   = finMonthlyForYear(y);
-    labels          = MONTHS;
-    incomeSeries    = monthly.map(m => m.income);
-    allowanceSeries = monthly.map(m => m.allowanceIncome);
-    expDESeries     = monthly.map(m => m.expDE);
-    trSeries        = monthly.map(m => m.tr);
-    deCatRows       = monthly;
-    trMomSeries     = monthly.map(m => m.trMom);
-    trOthersSeries  = monthly.map(m => m.trOthers);
+    const monthly = finMonthlyForYear(y);
+    labels = MONTHS;
+    incomeSeries = monthly.map(m => m.income);
+    expDESeries  = monthly.map(m => m.expDE);
+    trSeries     = monthly.map(m => m.tr);
+    deCatRows    = monthly;
+    trMomSeries    = monthly.map(m => m.trMom);
+    trOthersSeries = monthly.map(m => m.trOthers);
     document.getElementById('finDashIncExpTitle').textContent = `Income vs Expenses (k€) — ${y}`;
-    document.getElementById('finDashNetTitle').textContent    = `Net cashflow (k€) — ${y}`;
-    document.getElementById('finDashDECatTitle').textContent  = `Expenses DE — category breakdown, ${y}`;
-    document.getElementById('finDashTRTitle').textContent     = `TR Payments — Mom vs Others, ${y}`;
+    document.getElementById('finDashNetTitle').textContent = `Net cashflow (k€) — ${y}`;
+    document.getElementById('finDashDECatTitle').textContent = `Expenses DE — category breakdown, ${y}`;
+    document.getElementById('finDashTRTitle').textContent = `TR Payments — Mom vs Others, ${y}`;
   }
 
-  // ── Chart 1: Income vs Expenses (salary + allowance side-by-side, no stacking) ──
+  // ── Chart 1: Income vs Expenses ──
   destroyChart('finDashIncExp');
-  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), {
-    type:'bar',
-    data:{ labels, datasets:[
-      { ...barSeries('Salary k€',      incomeSeries,    C.green)  },
-      { ...barSeries('Allowance k€',   allowanceSeries, C.teal)   },
-      { ...barSeries('Expenses DE k€', expDESeries,     C.red)    },
-      { ...barSeries('TR Payments k€', trSeries,        C.yellow) },
-    ]},
-    options: makeOpts()
-  });
+  const incExpDatasets = [
+    { ...barSeries('Income k€', incomeSeries, C.green) },
+    { ...barSeries('Expenses DE k€', expDESeries, C.red) },
+    { ...barSeries('TR Payments k€', trSeries, C.yellow) },
+  ];
+  if (view === 'monthly' && compareActive) {
+    const cyMonthly = finMonthlyForYear(cy);
+    incExpDatasets.push({ ...barSeries(`Income k€ (${cy})`, cyMonthly.map(m=>m.income), C.green+'80') });
+  }
+  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions });
 
   // ── Chart 2: Net cashflow ──
+  // Treat a missing component as 0 rather than requiring Income+ExpDE+TR to
+  // all be present — otherwise years with Income-only data (no DE detail yet)
+  // would show no bar at all, which is misleading since we DO know the net
+  // contribution from what we have. Years with truly nothing show no bar.
   destroyChart('finDashNet');
   const netSeries = labels.map((_, i) => {
-    const inc = incomeSeries[i], al = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i];
-    if (inc==null && al==null && de==null && tr==null) return null;
-    return round3(((inc??0)+(al??0)) - (de??0) - (tr??0));
+    const inc = incomeSeries[i], de = expDESeries[i], tr = trSeries[i];
+    if (inc==null && de==null && tr==null) return null; // nothing at all known
+    return round3((inc ?? 0) - (de ?? 0) - (tr ?? 0));
   });
-  const netIncomplete = labels.map((_, i) =>
-    (incomeSeries[i]==null && allowanceSeries[i]==null) || expDESeries[i]==null || trSeries[i]==null
-  );
+  const netIncomplete = labels.map((_, i) => incomeSeries[i]==null || expDESeries[i]==null || trSeries[i]==null);
+  const netColors = netSeries.map((v,i) => {
+    if (v==null) return '#444';
+    const base = v>=0 ? C.green : C.red;
+    return netIncomplete[i] ? base+'55' : base+'cc'; // partial years shown lighter/more transparent
+  });
   charts['finDashNet'] = new Chart(document.getElementById('finDashNetChart'), {
     type:'bar',
-    data:{ labels, datasets:[{
-      label:'Net k€',
-      data: netSeries,
-      backgroundColor: netSeries.map((v,i) => {
-        if (v==null) return 'transparent';
-        const base = v>=0 ? C.green : C.red;
-        return netIncomplete[i] ? base+'66' : base+'cc';
-      }),
-      borderRadius:4, borderSkipped:false
-    }]},
-    options: makeOpts({
+    data:{ labels, datasets:[{ label:'Net k€', data:netSeries, backgroundColor:netColors, borderRadius:4, borderSkipped:false }] },
+    options: {
+      ...barOptions,
       plugins:{
+        ...barOptions.plugins,
         legend:{display:false},
-        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-          callbacks:{ label: ctx => {
-            const v = ctx.parsed.y;
-            if (v==null) return ' No data';
-            return netIncomplete[ctx.dataIndex] ? ` Net: ${v.toFixed(2)} k€ (partial)` : ` Net: ${v.toFixed(2)} k€`;
-          }}
-        },
-        datalabels:{ ...valueLabel(2), align:'end', anchor:'end', offset:2,
-          display: ctx => ctx.parsed.y !== null }
+        tooltip:{
+          ...barOptions.plugins.tooltip,
+          callbacks:{
+            label: ctx => {
+              const v = ctx.parsed.y;
+              const partial = netIncomplete[ctx.dataIndex];
+              if (v==null) return ' No data';
+              return partial ? ` Net: ${v.toFixed(2)} k€ (partial — missing Expenses DE or TR for this period)` : ` Net: ${v.toFixed(2)} k€`;
+            }
+          }
+        }
       }
-    })
+    }
   });
 
-  // ── Chart 3: DE category breakdown (stacked) ──
+  // ── Chart 3: DE category breakdown (stacked bar) ──
   destroyChart('finDashDECat');
+  const deCatDatasets = EXP_DE_PARTS.map((cat, i) => ({
+    type:'bar', label: DE_CAT_LABELS[cat],
+    data: deCatRows.map(r => r[cat]),
+    backgroundColor: DE_CAT_COLORS[i]+'cc',
+    borderRadius: 2, borderSkipped:false,
+  }));
   charts['finDashDECat'] = new Chart(document.getElementById('finDashDECatChart'), {
     type:'bar',
-    data:{ labels, datasets: EXP_DE_PARTS.map((cat, i) => ({
-      type:'bar', label: DE_CAT_LABELS[cat],
-      data: deCatRows.map(r => r[cat]),
-      backgroundColor: DE_CAT_COLORS[i]+'cc',
-      borderRadius:2, borderSkipped:false,
-    }))},
-    options: makeOpts({
-      plugins:{
-        legend:{labels:{color:'#7a8ba8',font:{size:11,family:'Inter'},boxWidth:14}},
-        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
-        datalabels:{display:false}
-      },
-      scales:{
-        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}},stacked:true},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}},stacked:true}
-      }
-    })
+    data:{ labels, datasets: deCatDatasets },
+    options: {
+      ...barOptions,
+      plugins: { ...barOptions.plugins, datalabels: { display:false } }, // too cluttered stacked
+      scales: { x:{ ...barOptions.scales.x, stacked:true }, y:{ ...barOptions.scales.y, stacked:true } }
+    }
   });
 
   // ── Chart 4: TR Mom vs Others ──
   destroyChart('finDashTR');
   charts['finDashTR'] = new Chart(document.getElementById('finDashTRChart'), {
     type:'bar',
-    data:{ labels, datasets:[
-      { ...barSeries('Mom k€',    trMomSeries,    C.blue)   },
-      { ...barSeries('Others k€', trOthersSeries, C.purple) },
-    ]},
-    options: makeOpts()
+    data:{
+      labels,
+      datasets:[
+        { ...barSeries('Mom k€', trMomSeries, C.blue) },
+        { ...barSeries('Others k€', trOthersSeries, C.purple) },
+      ]
+    },
+    options: barOptions
   });
 }
 
@@ -1571,12 +1524,6 @@ function renderFinDashboard() {
   ensureFinDashSelectors();
   renderFinDashKpis();
   renderFinDashCharts();
-  // Force charts to resize after render in case canvas was previously hidden
-  requestAnimationFrame(() => {
-    ['finDashIncExp','finDashNet','finDashDECat','finDashTR'].forEach(id => {
-      if (charts[id]) charts[id].resize();
-    });
-  });
 }
 
 /* ════════════════════════════════════════════
@@ -1652,7 +1599,7 @@ function importCsvText(text) {
 /* ── Finance CSV import — expects a clean header row matching FIN_EXPORT_COLS,
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
-const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+const FIN_NUMERIC_COLS = ['year','monthNum','income','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
@@ -1825,7 +1772,7 @@ async function pullFinFromSheets() {
   const resp = await appsScriptCall('GET', null, 25000, 'Finance');
   if (!resp) { log.textContent = 'Finance pull failed.'; return; }
   try {
-    const numericFields = ['year','monthNum','income','allowanceIncome','expDE','expTR',
+    const numericFields = ['year','monthNum','income','expDE','expTR',
       ...EXP_DE_PARTS, ...EXP_TR_PARTS];
     const rows = (resp.rows || []).map(r => {
       numericFields.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
