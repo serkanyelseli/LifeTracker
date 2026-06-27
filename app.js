@@ -1478,9 +1478,6 @@ function renderFinDashCharts() {
   charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: stackedBarOptions });
 
   // ── Chart 2: Net cashflow ──
-  // Total income (salary + allowance) minus all expenses.
-  // Missing components treated as 0 so partial years still show a bar.
-  // Years with truly no data at all show nothing.
   destroyChart('finDashNet');
   const netSeries = labels.map((_, i) => {
     const inc = incomeSeries[i], al = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i];
@@ -1492,32 +1489,41 @@ function renderFinDashCharts() {
     const hasIncome = incomeSeries[i]!=null || allowanceSeries[i]!=null;
     return !hasIncome || expDESeries[i]==null || trSeries[i]==null;
   });
-  const netColors = netSeries.map((v,i) => {
-    if (v==null) return '#444';
-    const base = v>=0 ? C.green : C.red;
-    return netIncomplete[i] ? base+'55' : base+'cc'; // partial years shown lighter/more transparent
-  });
+  // Use per-bar color via a dataset per sign to avoid array backgroundColor issues
+  const netPos = netSeries.map(v => (v!=null && v>=0) ? v : null);
+  const netNeg = netSeries.map(v => (v!=null && v<0)  ? v : null);
+  const netPartialPos = netSeries.map((v,i) => (v!=null && v>=0 && netIncomplete[i]) ? v : null);
+  const netPartialNeg = netSeries.map((v,i) => (v!=null && v<0  && netIncomplete[i]) ? v : null);
+  const netChartOpts = {
+    responsive:true, maintainAspectRatio:true,
+    layout:{padding:{top:20}},
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+        callbacks:{ label: ctx => {
+          const raw = netSeries[ctx.dataIndex];
+          const partial = netIncomplete[ctx.dataIndex];
+          if (raw==null) return ' No data';
+          return partial ? ` Net: ${raw.toFixed(2)} k€ (partial estimate)` : ` Net: ${raw.toFixed(2)} k€`;
+        }}
+      },
+      datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
+        display: ctx => ctx.parsed.y !== null && ctx.parsed.y !== 0 }
+    },
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
+    }
+  };
   charts['finDashNet'] = new Chart(document.getElementById('finDashNetChart'), {
     type:'bar',
-    data:{ labels, datasets:[{ label:'Net k€', data:netSeries, backgroundColor:netColors, borderRadius:4, borderSkipped:false }] },
-    options: {
-      ...barOptions,
-      plugins:{
-        ...barOptions.plugins,
-        legend:{display:false},
-        tooltip:{
-          ...barOptions.plugins.tooltip,
-          callbacks:{
-            label: ctx => {
-              const v = ctx.parsed.y;
-              const partial = netIncomplete[ctx.dataIndex];
-              if (v==null) return ' No data';
-              return partial ? ` Net: ${v.toFixed(2)} k€ (partial — missing Expenses DE or TR for this period)` : ` Net: ${v.toFixed(2)} k€`;
-            }
-          }
-        }
-      }
-    }
+    data:{ labels, datasets:[
+      { label:'Net k€ (+)', data:netPos,        backgroundColor:C.green+'cc', borderRadius:4, borderSkipped:false },
+      { label:'Net k€ (-)', data:netNeg,        backgroundColor:C.red+'cc',   borderRadius:4, borderSkipped:false },
+      { label:'Partial (+)',data:netPartialPos,  backgroundColor:C.green+'55', borderRadius:4, borderSkipped:false },
+      { label:'Partial (-)',data:netPartialNeg,  backgroundColor:C.red+'55',   borderRadius:4, borderSkipped:false },
+    ]},
+    options: netChartOpts
   });
 
   // ── Chart 3: DE category breakdown (stacked bar) ──
