@@ -1346,16 +1346,26 @@ function renderFinDashKpis() {
   const b  = compareActive ? finDataForYear(cy) : null;
   if (!a) { document.getElementById('finDashKpiGrid').innerHTML=''; return; }
 
+  function totalIncome(row) {
+    if (!row || (row.income == null && row.allowanceIncome == null)) return null;
+    return (row.income ?? 0) + (row.allowanceIncome ?? 0);
+  }
   function calcNet(row) {
-    if (!row || (row.income==null && row.expDE==null && row.tr==null)) return { net:null, partial:false };
-    const partial = row.income==null || row.expDE==null || row.tr==null;
-    const net = (row.income ?? 0) - (row.expDE ?? 0) - (row.tr ?? 0);
+    const totalInc = totalIncome(row);
+    // For historical years, Expenses DE were not tracked; treat missing ExpDE as 0.
+    // Allowance is also optional and treated as 0 when not present.
+    // Only missing salary/allowance income AND TR payments should make the net cashflow incomplete.
+    if (!row || (totalInc == null && row.tr == null)) return { net:null, partial:false };
+    const partial = totalInc == null || row.tr == null;
+    const net = (totalInc ?? 0) - (row.expDE ?? 0) - (row.tr ?? 0);
     return { net: round3(net), partial };
   }
   const { net:netA, partial:partialA } = calcNet(a);
   const { net:netB } = calcNet(b);
-  const savingsA = (a.income && netA!=null) ? (netA/a.income*100) : null;
-  const savingsB = (b && b.income && netB!=null) ? (netB/b.income*100) : null;
+  const totalIncomeA = totalIncome(a);
+  const totalIncomeB = totalIncome(b);
+  const savingsA = (totalIncomeA && netA!=null) ? (netA/totalIncomeA*100) : null;
+  const savingsB = (b && totalIncomeB && netB!=null) ? (netB/totalIncomeB*100) : null;
 
   function finCard(title, valA, valB, unit='k€', lowerBetter=false, decimals=2, partialFlag=false) {
     const v = valA!=null ? fmt(valA, decimals)+' '+unit : '—';
@@ -1367,7 +1377,7 @@ function renderFinDashKpis() {
         : trivial ? `~${(delta>=0?'+':'')+fmt(delta,decimals)} (≈same) vs ${cy}`
         : `${(delta>=0?'+':'')+fmt(delta,decimals)} vs ${cy}`)
       : 'Single year';
-    const partialTag = partialFlag ? `<span class="partial-tag" title="One or more components (Income/Expenses DE/TR) missing for part of this period">partial</span>` : '';
+    const partialTag = partialFlag ? `<span class="partial-tag" title="One or more core components (income or TR) missing for part of this period">partial</span>` : '';
     return `<div class="fin-card">
       <div class="fin-title">${title} · ${y}${partialTag}</div>
       <div class="fin-value">${v}</div>
@@ -1461,11 +1471,12 @@ function renderFinDashCharts() {
   // contribution from what we have. Years with truly nothing show no bar.
   destroyChart('finDashNet');
   const netSeries = labels.map((_, i) => {
-    const inc = incomeSeries[i], de = expDESeries[i], tr = trSeries[i];
-    if (inc==null && de==null && tr==null) return null; // nothing at all known
-    return round3((inc ?? 0) - (de ?? 0) - (tr ?? 0));
+    const inc = incomeSeries[i], allowance = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i];
+    const totalInc = (inc ?? 0) + (allowance ?? 0);
+    if (inc==null && allowance==null && de==null && tr==null) return null; // nothing at all known
+    return round3(totalInc - (de ?? 0) - (tr ?? 0));
   });
-  const netIncomplete = labels.map((_, i) => incomeSeries[i]==null || expDESeries[i]==null || trSeries[i]==null);
+  const netIncomplete = labels.map((_, i) => (incomeSeries[i]==null && allowanceSeries[i]==null) || trSeries[i]==null);
   const netColors = netSeries.map((v,i) => {
     if (v==null) return '#444';
     const base = v>=0 ? C.green : C.red;
@@ -1486,7 +1497,7 @@ function renderFinDashCharts() {
               const v = ctx.parsed.y;
               const partial = netIncomplete[ctx.dataIndex];
               if (v==null) return ' No data';
-              return partial ? ` Net: ${v.toFixed(2)} k€ (partial — missing Expenses DE or TR for this period)` : ` Net: ${v.toFixed(2)} k€`;
+              return partial ? ` Net: ${v.toFixed(2)} k€ (partial — missing income or TR for this period)` : ` Net: ${v.toFixed(2)} k€`;
             }
           }
         }
