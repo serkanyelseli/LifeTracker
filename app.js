@@ -135,7 +135,24 @@ function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) |
 function setData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
 const FIN_STORAGE_KEY = 'serkanLifeTrackerV3_finance';
-function getFinData() { try { return JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]'); } catch(e) { return []; } }
+function getFinData() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]');
+    // Sanitize: ensure all numeric fields are actually numbers, not strings
+    // (can happen if data was imported before FIN_NUMERIC_COLS was complete)
+    const numFields = ['year','monthNum','income','allowanceIncome','expDE','expTR',
+      ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+    return raw.map(r => {
+      numFields.forEach(f => {
+        if (r[f] !== null && r[f] !== undefined && r[f] !== '') {
+          const n = Number(r[f]);
+          if (!isNaN(n)) r[f] = n;
+        }
+      });
+      return r;
+    });
+  } catch(e) { return []; }
+}
 function setFinData(d) { localStorage.setItem(FIN_STORAGE_KEY, JSON.stringify(d)); }
 function getSheetId() { return localStorage.getItem(SHEET_ID_KEY) || ''; }
 function setSheetId(id) { localStorage.setItem(SHEET_ID_KEY, id); }
@@ -1266,7 +1283,7 @@ function round1(n) { return Math.round(n*10)/10; }
    'yearly' row for years with no real monthly data at all. Includes DE
    category sums and TR Mom/Others split for the dedicated charts. */
 function sumField(rows, k) {
-  const vals = rows.map(d=>d[k]).filter(v=>v!=null);
+  const vals = rows.map(d => parseNum(d[k])).filter(v => v!=null);
   return vals.length ? vals.reduce((a,b)=>a+b,0) : null;
 }
 function finYearlyAggregate() {
@@ -1317,10 +1334,10 @@ function finMonthlyForYear(y) {
     }
     const row = { m, income: src.income, allowanceIncome: src.allowanceIncome ?? null, expDE: src.expDE, tr: src.expTR };
     EXP_DE_PARTS.forEach(c => row[c] = src[c] ?? null);
-    const momExtra    = TR_MOM_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
-    const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
-    row.trMom    = momExtra || null;
-    row.trOthers = othersExtra || null;
+    const momExtra    = TR_MOM_PARTS.reduce((s,f)=>{ const v=parseNum(src[f]); return v!=null ? s+v : s; }, 0);
+    const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=parseNum(src[f]); return v!=null ? s+v : s; }, 0);
+    row.trMom    = momExtra > 0 ? momExtra : null;
+    row.trOthers = othersExtra > 0 ? othersExtra : null;
     return row;
   });
 }
