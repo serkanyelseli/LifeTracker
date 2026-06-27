@@ -993,7 +993,14 @@ function renderPatterns() {
   const rows = patternRows(yearFilter);
   const label = yearFilter === 'all' ? `all years (${rows.length} days)` : `${yearFilter} (${rows.length} days)`;
   document.querySelector('#patterns .panel-title').textContent = `Weekly Patterns — ${label}`;
-  PATTERN_METRICS.forEach(m => renderPatternChart(m, rows));
+  // Defer chart rendering so section is visible and canvases have real pixel dimensions
+  setTimeout(() => {
+    PATTERN_METRICS.forEach(m => renderPatternChart(m, rows));
+    // Force resize after render in case dimensions were still settling
+    setTimeout(() => {
+      PATTERN_METRICS.forEach(m => { if (charts[m.id]) charts[m.id].resize(); });
+    }, 100);
+  }, 50);
 }
 
 function switchView(v) {
