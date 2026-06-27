@@ -863,6 +863,139 @@ function clearCalEventForm() {
 }
 
 
+/* ════════════════════════════════════════════
+   WEEKLY PATTERNS
+════════════════════════════════════════════ */
+const DOW_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+const PATTERN_METRICS = [
+  { key:'newScore',  id:'patNewScore', label:'New Score',       decimals:2, color:'#0ea5e9', calcScore:true  },
+  { key:'score',     id:'patScore',    label:'Score (old)',     decimals:2, color:'#a78bfa', calcScore:false },
+  { key:'prayTotal', id:'patPrayer',   label:'Prayer',         decimals:2, color:'#f59e0b', calcScore:false },
+  { key:'reading',   id:'patReading',  label:'Reading (pages)',decimals:1, color:'#22c55e', calcScore:false },
+  { key:'workout',   id:'patWorkout',  label:'Workout (min)',  decimals:1, color:'#14b8a6', calcScore:false },
+  { key:'tvMovies',  id:'patScreen',   label:'Screen',         decimals:2, color:'#ef4444', calcScore:false },
+  { key:'sleep',     id:'patSleep',    label:'Sleep (h)',      decimals:2, color:'#8b5cf6', calcScore:false },
+];
+
+function ensurePatternYearSelector() {
+  const sel = document.getElementById('patternYearSelect');
+  if (!sel) return;
+  const ys = allYears().sort((a,b)=>b-a);
+  const current = sel.value;
+  sel.innerHTML = '<option value="all">All years</option>';
+  ys.forEach(y => {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    sel.appendChild(o);
+  });
+  if (current && (current==='all' || ys.includes(Number(current)))) sel.value = current;
+}
+
+/* Returns daily rows, optionally filtered by year */
+function patternRows(yearFilter) {
+  const all = getData().filter(d => d.type === 'daily' && d.date);
+  if (!yearFilter || yearFilter === 'all') return all;
+  return all.filter(d => Number(d.year) === Number(yearFilter));
+}
+
+/* Group rows by day-of-week (0=Mon…6=Sun) and compute per-metric averages */
+function calcDowAverages(rows, metricKey, calcScore) {
+  const buckets = Array.from({length:7}, ()=>[]);
+  rows.forEach(d => {
+    const date = new Date(d.date + 'T00:00:00');
+    // getDay(): 0=Sun,1=Mon…6=Sat → convert to Mon=0…Sun=6
+    const dow = (date.getDay() + 6) % 7;
+    let val;
+    if (metricKey === 'tvMovies') {
+      val = (parseNum(d.tv) ?? 0) + (parseNum(d.movies) ?? 0);
+      if (d.tv == null && d.movies == null) val = null;
+    } else if (calcScore && metricKey === 'newScore') {
+      val = parseNum(d.newScore);
+      if (val === null && (d.prayTotal != null || d.reading != null || d.sleep != null)) {
+        val = calcNewScore(d).total;
+      }
+    } else {
+      val = parseNum(d[metricKey]);
+    }
+    if (val !== null) buckets[dow].push(val);
+  });
+  return buckets.map(b => b.length ? round1(b.reduce((s,v)=>s+v,0)/b.length) : null);
+}
+
+function round1(n) { return Math.round(n*10)/10; }
+
+function renderPatternChart(metric, rows) {
+  destroyChart(metric.id);
+  const canvas = document.getElementById(metric.id);
+  if (!canvas) return;
+  const avgs = calcDowAverages(rows, metric.key, metric.calcScore);
+  const hasData = avgs.some(v => v !== null);
+  if (!hasData) return;
+
+  // Highlight weekend bars (Sat=5, Sun=6) with slightly different opacity
+  const bgColors = avgs.map((_, i) =>
+    i >= 5 ? metric.color + 'ee' : metric.color + '99'
+  );
+  const borderColors = avgs.map((_, i) =>
+    i >= 5 ? metric.color : metric.color + '66'
+  );
+
+  charts[metric.id] = new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels: DOW_LABELS,
+      datasets:[{
+        label: metric.label,
+        data: avgs,
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 1.5,
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      layout:{padding:{top:20}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+          titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+          callbacks:{label:ctx=>` ${metric.label}: ${ctx.parsed.y?.toFixed(metric.decimals)}`}
+        },
+        datalabels:{
+          color:'#cdd7ea',
+          font:{size:11,weight:'500',family:'JetBrains Mono, monospace'},
+          anchor:'end', align:'end', offset:2,
+          formatter:v=>v!=null?v.toFixed(metric.decimals):''
+        }
+      },
+      scales:{
+        x:{
+          grid:{color:'rgba(255,255,255,0.04)'},
+          ticks:{color:'#7a8ba8',font:{size:11}},
+        },
+        y:{
+          grid:{color:'rgba(255,255,255,0.04)'},
+          ticks:{color:'#7a8ba8',font:{size:10}},
+          beginAtZero:false,
+        }
+      }
+    }
+  });
+}
+
+function renderPatterns() {
+  ensurePatternYearSelector();
+  const yearFilter = document.getElementById('patternYearSelect')?.value || 'all';
+  const rows = patternRows(yearFilter);
+  const label = yearFilter === 'all' ? `all years (${rows.length} days)` : `${yearFilter} (${rows.length} days)`;
+  document.querySelector('#patterns .panel-title').textContent = `Weekly Patterns — ${label}`;
+  PATTERN_METRICS.forEach(m => renderPatternChart(m, rows));
+}
+
 function switchView(v) {
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   document.getElementById(v).classList.add('active');
@@ -871,6 +1004,7 @@ function switchView(v) {
   else if (v==='finDashboard') renderFinDashboard();
   else if (v==='history') renderHistory();
   else if (v==='calendar') renderCalendar();
+  else if (v==='patterns') renderPatterns();
   // 'guide' is static HTML — no render needed
 }
 
@@ -2123,6 +2257,9 @@ document.addEventListener('DOMContentLoaded', () => {
     r.onload = ev => importSchoolHolidayCsv(ev.target.result);
     r.readAsText(f, 'UTF-8');
   });
+
+  // Patterns year selector
+  document.getElementById('patternYearSelect')?.addEventListener('change', renderPatterns);
 
   // Boot — open on Dashboard (Option 3: smart default)
   ensureYearSelectors();
