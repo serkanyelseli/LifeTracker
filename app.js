@@ -1091,6 +1091,7 @@ function renderKpis() {
 ════════════════════════════════════════════ */
 const RECORD_METRICS = [
   { key:'newScore',  label:'New Score',    icon:'⭐', higher:true,  unit:'',    decimals:1 },
+  { key:'score',     label:'Score (old)',  icon:'🏅', higher:true,  unit:'',    decimals:1 },
   { key:'prayTotal', label:'Prayer',       icon:'🤲', higher:true,  unit:'',    decimals:1 },
   { key:'reading',   label:'Reading',      icon:'📖', higher:true,  unit:'p',   decimals:0 },
   { key:'workout',   label:'Workout',      icon:'💪', higher:true,  unit:'min', decimals:0 },
@@ -1450,19 +1451,30 @@ function renderFinDashCharts() {
   }
 
   // ── Chart 1: Income vs Expenses ──
+  // Salary and Allowance are stacked into one bar (green bottom, teal top).
+  // Expenses DE and TR remain as separate side-by-side bars.
+  // Using named stacks: 'income' groups salary+allowance, leaving DE and TR ungrouped.
   destroyChart('finDashIncExp');
   const incExpDatasets = [
-    { ...barSeries('Income k€', incomeSeries, C.green) },
-    { ...barSeries('Allowance Income k€', allowanceSeries, C.teal) },
-    { ...barSeries('Expenses DE k€', expDESeries, C.red) },
-    { ...barSeries('TR Payments k€', trSeries, C.yellow) },
+    { ...barSeries('Salary k€',    incomeSeries,    C.green), stack: 'income' },
+    { ...barSeries('Allowance k€', allowanceSeries, C.teal),  stack: 'income' },
+    { ...barSeries('Expenses DE k€', expDESeries,   C.red)    },
+    { ...barSeries('TR Payments k€', trSeries,      C.yellow) },
   ];
   if (view === 'monthly' && compareActive) {
     const cyMonthly = finMonthlyForYear(cy);
-    incExpDatasets.push({ ...barSeries(`Income k€ (${cy})`, cyMonthly.map(m=>m.income), C.green+'80') });
-    incExpDatasets.push({ ...barSeries(`Allowance Income k€ (${cy})`, cyMonthly.map(m=>m.allowanceIncome), C.teal+'80') });
+    incExpDatasets.push({ ...barSeries(`Salary k€ (${cy})`,    cyMonthly.map(m=>m.income),         C.green+'80'), stack: `income_${cy}` });
+    incExpDatasets.push({ ...barSeries(`Allowance k€ (${cy})`, cyMonthly.map(m=>m.allowanceIncome), C.teal+'80'),  stack: `income_${cy}` });
   }
-  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions });
+  // Stacked scales only for this chart — created fresh, not mutating barOptions
+  const incExpOptions = {
+    ...barOptions,
+    scales: {
+      x: { ...barOptions.scales.x, stacked: true },
+      y: { ...barOptions.scales.y, stacked: false }
+    }
+  };
+  charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: incExpOptions });
 
   // ── Chart 2: Net cashflow ──
   // Treat a missing component as 0 rather than requiring Income+ExpDE+TR to
@@ -1535,6 +1547,49 @@ function renderFinDashCharts() {
       ]
     },
     options: barOptions
+  });
+
+  // ── Chart 5: Cumulative cashflow — always yearly, shows running total since 2008 ──
+  destroyChart('finDashCumul');
+  const yearly = finYearlyAggregate();
+  const cumulLabels = yearly.map(f => String(f.y));
+  let running = 0;
+  const cumulSeries = yearly.map(f => {
+    const inc = (f.income??0) + (f.allowanceIncome??0);
+    const net = inc - (f.expDE??0) - (f.tr??0);
+    running = round3(running + net);
+    return running;
+  });
+  charts['finDashCumul'] = new Chart(document.getElementById('finDashCumulChart'), {
+    type:'line',
+    data:{ labels: cumulLabels, datasets:[{
+      label:'Cumulative net k€',
+      data: cumulSeries,
+      borderColor: C.blue,
+      backgroundColor: C.blue+'22',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4,
+      pointBackgroundColor: C.blue,
+      borderWidth: 2,
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      layout:{padding:{top:16}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+          titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+          callbacks:{label:ctx=>` Cumulative: ${ctx.parsed.y.toFixed(2)} k€`}},
+        datalabels:{...valueLabel(2),align:'top',anchor:'end',offset:4,
+          display:ctx=>ctx.dataIndex===cumulSeries.length-1||ctx.dataIndex===0}
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}},
+          title:{display:true,text:'k€',color:'#7a8ba8',font:{size:11}}}
+      }
+    }
   });
 }
 
