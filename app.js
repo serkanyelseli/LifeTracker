@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════
-   Serkan Life Tracker V3.0
+   Serkan Life Tracker V3.1
    - Chart.js charts with tooltips
    - scorePreview includes Nutrition + Bonus/Malus
    - Fixed comparison delta logic (prayer, sleep, trivial)
    - Partial year detection
-   - Finance tab (Worth, Income, Expenses DE, TR Payments)
+   - Finance tab (Worth, Income, Allowance Income, Expenses DE, TR Payments)
    - Google Sheets read/write
    - Drag-and-drop CSV import
    - JSON export
@@ -27,9 +27,9 @@ const EXP_DE_PARTS = ['expHousehold','expSeko','expCiko','expYaz','expPotisko','
 const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious'];
 const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
 const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
-const FIN_ENTRY_FIELDS = ['month','income','expDE','expTR','notes',
+const FIN_ENTRY_FIELDS = ['month','income','allowanceIncome','expDE','expTR','notes',
   ...EXP_DE_PARTS, ...EXP_TR_PARTS];
-const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','expDE','expTR',
+const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
   ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'notes'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
@@ -108,7 +108,7 @@ function seedFinanceDataIfNeeded() {
   FINANCE_SEED_YEARLY.forEach(f => {
     seeded.push({
       type: 'yearly', month: `${f.y}`, year: f.y, monthNum: null,
-      income: f.income, expDE: f.expDE, expTR: f.tr,
+      income: f.income, allowanceIncome: null, expDE: f.expDE, expTR: f.tr,
       ...nullBreakdownFields(),
       notes: 'Seeded from historical Excel export — no category breakdown available.',
     });
@@ -117,7 +117,7 @@ function seedFinanceDataIfNeeded() {
     const mm = String(f.m).padStart(2,'0');
     seeded.push({
       type: 'monthly', month: `2026-${mm}`, year: 2026, monthNum: f.m,
-      income: f.income, expDE: f.expDE, expTR: f.tr,
+      income: f.income, allowanceIncome: null, expDE: f.expDE, expTR: f.tr,
       ...nullBreakdownFields(),
       notes: 'Seeded from historical Excel export — no category breakdown available.',
     });
@@ -423,6 +423,7 @@ function getFinFormEntry() {
     type: 'daily-fin', // monthly real entry, distinct from seeded 'monthly'/'yearly'
     month, year: y, monthNum: m,
     income: parseNum(document.getElementById('finIncome').value),
+    allowanceIncome: parseNum(document.getElementById('finAllowanceIncome').value),
     expDE: parseNum(document.getElementById('finExpDE').value),
     expTR: parseNum(document.getElementById('finExpTR').value),
     notes: document.getElementById('finNotes').value || '',
@@ -434,6 +435,7 @@ function getFinFormEntry() {
 
 function fillFinForm(e) {
   document.getElementById('finIncome').value = (e && e.income!=null) ? e.income : '';
+  document.getElementById('finAllowanceIncome').value = (e && e.allowanceIncome!=null) ? e.allowanceIncome : '';
   document.getElementById('finExpDE').value  = (e && e.expDE!=null)  ? e.expDE  : '';
   document.getElementById('finExpTR').value  = (e && e.expTR!=null)  ? e.expTR  : '';
   document.getElementById('finNotes').value  = (e && e.notes) ? e.notes : '';
@@ -1270,7 +1272,7 @@ function finYearlyAggregate() {
     const monthly = data.filter(d => d.year===y && d.type==='daily-fin');
     const seededYear = data.find(d => d.year===y && d.type==='yearly');
     if (monthly.length) {
-      const row = { y, income: sumField(monthly,'income'), expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR') };
+      const row = { y, income: sumField(monthly,'income'), allowanceIncome: sumField(monthly,'allowanceIncome'), expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR') };
       EXP_DE_PARTS.forEach(c => row[c] = sumField(monthly, c));
       const momSum = sumField(monthly, 'trMomVarious');
       const othersSum = sumField(monthly, 'trOthersVarious');
@@ -1282,11 +1284,11 @@ function finYearlyAggregate() {
       return row;
     }
     if (seededYear) {
-      const row = { y, income: seededYear.income, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null };
+      const row = { y, income: seededYear.income, allowanceIncome: seededYear.allowanceIncome ?? null, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null };
       EXP_DE_PARTS.forEach(c => row[c] = null);
       return row;
     }
-    const row = { y, income: null, expDE: null, tr: null, trMom: null, trOthers: null };
+    const row = { y, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null };
     EXP_DE_PARTS.forEach(c => row[c] = null);
     return row;
   });
@@ -1301,11 +1303,11 @@ function finMonthlyForYear(y) {
     const seeded = !real ? data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='monthly') : null;
     const src = real || seeded;
     if (!src) {
-      const row = { m, income: null, expDE: null, tr: null, trMom: null, trOthers: null };
+      const row = { m, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null };
       EXP_DE_PARTS.forEach(c => row[c] = null);
       return row;
     }
-    const row = { m, income: src.income, expDE: src.expDE, tr: src.expTR };
+    const row = { m, income: src.income, allowanceIncome: src.allowanceIncome ?? null, expDE: src.expDE, tr: src.expTR };
     EXP_DE_PARTS.forEach(c => row[c] = src[c] ?? null);
     const momExtra = TR_MOM_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
     const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
@@ -1375,6 +1377,7 @@ function renderFinDashKpis() {
 
   document.getElementById('finDashKpiGrid').innerHTML =
     finCard('Income',           a.income, b?.income, 'k€', false) +
+    finCard('Allowance Income', a.allowanceIncome, b?.allowanceIncome, 'k€', false) +
     finCard('Expenses DE',      a.expDE,  b?.expDE,  'k€', true)  +
     finCard('TR Payments',      a.tr,     b?.tr,      'k€', true)  +
     finCard('Net Cashflow',     netA,     netB,       'k€', false, 2, partialA) +
@@ -1404,12 +1407,13 @@ function renderFinDashCharts() {
     }
   };
 
-  let labels, incomeSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
+  let labels, incomeSeries, allowanceSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
 
   if (view === 'yearly') {
     const yearly = finYearlyAggregate();
     labels = yearly.map(f => String(f.y));
     incomeSeries = yearly.map(f => f.income);
+    allowanceSeries = yearly.map(f => f.allowanceIncome);
     expDESeries  = yearly.map(f => f.expDE);
     trSeries     = yearly.map(f => f.tr);
     deCatRows    = yearly;
@@ -1423,6 +1427,7 @@ function renderFinDashCharts() {
     const monthly = finMonthlyForYear(y);
     labels = MONTHS;
     incomeSeries = monthly.map(m => m.income);
+    allowanceSeries = monthly.map(m => m.allowanceIncome);
     expDESeries  = monthly.map(m => m.expDE);
     trSeries     = monthly.map(m => m.tr);
     deCatRows    = monthly;
@@ -1438,12 +1443,14 @@ function renderFinDashCharts() {
   destroyChart('finDashIncExp');
   const incExpDatasets = [
     { ...barSeries('Income k€', incomeSeries, C.green) },
+    { ...barSeries('Allowance Income k€', allowanceSeries, C.teal) },
     { ...barSeries('Expenses DE k€', expDESeries, C.red) },
     { ...barSeries('TR Payments k€', trSeries, C.yellow) },
   ];
   if (view === 'monthly' && compareActive) {
     const cyMonthly = finMonthlyForYear(cy);
     incExpDatasets.push({ ...barSeries(`Income k€ (${cy})`, cyMonthly.map(m=>m.income), C.green+'80') });
+    incExpDatasets.push({ ...barSeries(`Allowance Income k€ (${cy})`, cyMonthly.map(m=>m.allowanceIncome), C.teal+'80') });
   }
   charts['finDashIncExp'] = new Chart(document.getElementById('finDashIncExpChart'), { type:'bar', data:{ labels, datasets: incExpDatasets }, options: barOptions });
 
@@ -1599,7 +1606,7 @@ function importCsvText(text) {
 /* ── Finance CSV import — expects a clean header row matching FIN_EXPORT_COLS,
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
-const FIN_NUMERIC_COLS = ['year','monthNum','income','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
@@ -1772,7 +1779,7 @@ async function pullFinFromSheets() {
   const resp = await appsScriptCall('GET', null, 25000, 'Finance');
   if (!resp) { log.textContent = 'Finance pull failed.'; return; }
   try {
-    const numericFields = ['year','monthNum','income','expDE','expTR',
+    const numericFields = ['year','monthNum','income','allowanceIncome','expDE','expTR',
       ...EXP_DE_PARTS, ...EXP_TR_PARTS];
     const rows = (resp.rows || []).map(r => {
       numericFields.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
