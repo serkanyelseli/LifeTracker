@@ -1347,6 +1347,125 @@ function renderRecords() {
     : '<p style="color:var(--muted);font-size:13px">Not enough data to compute records yet.</p>';
 }
 
+/* ════════════════════════════════════════════
+   STREAKS
+════════════════════════════════════════════ */
+const STREAK_METRICS = [
+  { key:'workout',   label:'Workout',       icon:'💪', test: d => (parseNum(d.workout) ?? 0) > 0    },
+  { key:'reading',   label:'Reading',       icon:'📖', test: d => (parseNum(d.reading) ?? 0) > 0    },
+  { key:'water',     label:'Water ≥ 3L',    icon:'💧', test: d => (parseNum(d.water)   ?? 0) >= 3   },
+  { key:'german',    label:'German',        icon:'🇩🇪', test: d => (parseNum(d.german)  ?? 0) > 0    },
+  { key:'prayer',    label:'Full prayer',   icon:'🤲', test: d => (parseNum(d.prayTotal)?? 0) >= 7  },
+  { key:'score',     label:'Positive day',  icon:'⭐', test: d => {
+      const ns = parseNum(d.newScore) ?? (d.prayTotal!=null ? calcNewScore(d).total : null);
+      return ns !== null && ns > 0;
+    }
+  },
+  { key:'noscreen',  label:'No screen',     icon:'📵', test: d => {
+      const tv = parseNum(d.tv) ?? 0;
+      const mv = parseNum(d.movies) ?? 0;
+      return (tv + mv) === 0 && (d.tv !== null || d.movies !== null);
+    }
+  },
+];
+
+function calcStreaks(dailyRows, testFn) {
+  // dailyRows must be sorted by date ascending
+  let best = 0, bestStart = null, bestEnd = null;
+  let cur  = 0, curStart  = null;
+  let prev = null;
+
+  dailyRows.forEach(d => {
+    if (!d.date) return;
+    const pass = testFn(d);
+
+    // Check for consecutive days (allow 1-day gaps only for missing data)
+    const isConsecutive = prev && daysBetween(prev.date, d.date) === 1;
+
+    if (pass) {
+      if (cur === 0 || !isConsecutive) {
+        // New streak starting
+        cur = 1;
+        curStart = d.date;
+      } else {
+        cur++;
+      }
+      if (cur > best) {
+        best = cur; bestStart = curStart; bestEnd = d.date;
+      }
+    } else {
+      cur = 0; curStart = null;
+    }
+    prev = d;
+  });
+
+  // Current streak — work backwards from most recent row
+  let current = 0;
+  const today  = todayISO();
+  const sorted = [...dailyRows].reverse();
+  for (const d of sorted) {
+    if (!d.date) continue;
+    // Allow today or yesterday as the start of "current"
+    if (current === 0 && daysBetween(d.date, today) > 1) break;
+    if (testFn(d)) {
+      current++;
+    } else {
+      break;
+    }
+  }
+
+  return { best, bestStart, bestEnd, current };
+}
+
+function daysBetween(a, b) {
+  // a and b are 'YYYY-MM-DD' strings
+  return Math.round((new Date(b) - new Date(a)) / 86400000);
+}
+
+function renderStreaks() {
+  const el = document.getElementById('streaksGrid');
+  if (!el) return;
+
+  const daily = getData()
+    .filter(d => d.type === 'daily' && d.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!daily.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">No daily data yet.</p>';
+    return;
+  }
+
+  const cards = STREAK_METRICS.map(m => {
+    const { best, bestStart, bestEnd, current } = calcStreaks(daily, m.test);
+    if (best === 0) return null;
+
+    const bestLabel = best === 1 ? '1 day' : best + ' days';
+    const curLabel  = current > 0
+      ? (current === 1 ? '1 day 🔥' : current + ' days 🔥')
+      : 'None active';
+    const period = bestStart && bestEnd && bestStart !== bestEnd
+      ? bestStart + ' → ' + bestEnd
+      : (bestStart || '');
+
+    return '<div class="record-card">' +
+      '<div class="record-trophy">' + m.icon + '</div>' +
+      '<div class="record-metric">' + m.label + '</div>' +
+      '<div class="record-value">' + bestLabel + '</div>' +
+      '<div class="record-when" style="font-size:11px;margin-top:2px">' +
+        '🏆 Best  · ' + period +
+      '</div>' +
+      '<div class="record-note" style="margin-top:4px;color:' +
+        (current > 0 ? 'var(--green)' : 'var(--muted)') + '">' +
+        'Now: ' + curLabel +
+      '</div>' +
+    '</div>';
+  }).filter(Boolean);
+
+  el.innerHTML = cards.length
+    ? cards.join('')
+    : '<p style="color:var(--muted);font-size:13px">No streak data found.</p>';
+}
+
 /* Show a nudge banner on the Dashboard if today hasn't been logged yet */
 function renderNotLoggedNudge() {
   const existing = document.getElementById('notLoggedNudge');
@@ -1370,6 +1489,7 @@ function renderDashboard() {
   ensureYearSelectors();
   renderKpis();
   renderRecords();
+  renderStreaks();
   renderNotLoggedNudge();
 
   const metric = document.getElementById('metricSelect').value;
