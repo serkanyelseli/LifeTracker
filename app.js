@@ -1912,8 +1912,8 @@ function download(blob, name) {
 /* ════════════════════════════════════════════
    GOOGLE SHEETS  (via Google Apps Script web app)
 ════════════════════════════════════════════ */
-async function appsScriptCall(method, body, timeoutMs = 25000, tab = null) {
-  const baseUrl = getSheetId(); // stores the Apps Script /exec URL
+async function appsScriptCall(method, body, timeoutMs = 25000, tab = null, params = {}) {
+  const baseUrl = getSheetId();
   if (!baseUrl) { toast('No Script URL configured','err'); return null; }
   updateSyncStatus('syncing');
   const controller = new AbortController();
@@ -1922,10 +1922,13 @@ async function appsScriptCall(method, body, timeoutMs = 25000, tab = null) {
     let url = baseUrl;
     const opts = { method, signal: controller.signal };
     if (method === 'POST') {
-      opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' }; // avoids CORS preflight on Apps Script
+      opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
       opts.body = JSON.stringify(tab ? { ...body, tab } : body);
-    } else if (method === 'GET' && tab) {
-      url += (url.includes('?') ? '&' : '?') + 'tab=' + encodeURIComponent(tab);
+    } else if (method === 'GET') {
+      const p = { ...params };
+      if (tab) p.tab = tab;
+      const qs = Object.entries(p).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+      if (qs) url += (url.includes('?') ? '&' : '?') + qs;
     }
     const resp = await fetch(url, opts);
     clearTimeout(timer);
@@ -1952,10 +1955,24 @@ async function pushEntryToSheets(entry) {
   if (resp) toast('Pushed to Sheets ✓', 'ok');
 }
 
-async function pullFromSheets() {
+async function pullFromSheets(fullPull = false) {
   const log = document.getElementById('sheetsLog');
-  log.textContent = 'Pulling from Sheets…';
-  const resp = await appsScriptCall('GET', null, 25000, 'Log');
+
+  // Find most recent local daily entry date
+  const latestLocal = getData()
+    .filter(d => d.type === 'daily' && d.date)
+    .map(d => d.date)
+    .sort().pop();
+
+  const params = {};
+  if (!fullPull && latestLocal) {
+    params.since = latestLocal;
+    log.textContent = `Pulling new entries since ${latestLocal}…`;
+  } else {
+    log.textContent = 'Pulling all log data from Sheets…';
+  }
+
+  const resp = await appsScriptCall('GET', null, 25000, 'Log', params);
   if (!resp) { log.textContent = 'Pull failed.'; return; }
   try {
     const rows = (resp.rows || []).map(r => {
@@ -1971,7 +1988,10 @@ async function pullFromSheets() {
     rows.forEach(e => { if (e.date) by.set(key(e), e); });
     const all = [...by.values()].sort((a,b) => (a.date+a.type).localeCompare(b.date+b.type));
     setData(all);
-    log.textContent = `✓ Pulled ${rows.length} rows. Total: ${all.length}.`;
+    const msg = !fullPull && latestLocal
+      ? `✓ Pulled ${rows.length} new rows since ${latestLocal}. Total: ${all.length}.`
+      : `✓ Pulled ${rows.length} rows. Total: ${all.length}.`;
+    log.textContent = msg;
     toast(`Pulled ${rows.length} rows`, 'ok');
     renderAll();
   } catch (e) { log.textContent = 'Parse error: ' + e.message; toast('Could not parse response', 'err'); }
@@ -2004,10 +2024,24 @@ async function pushFinEntryToSheets(entry) {
   if (resp) toast('Finance month pushed ✓', 'ok');
 }
 
-async function pullFinFromSheets() {
+async function pullFinFromSheets(fullPull = false) {
   const log = document.getElementById('sheetsLog');
-  log.textContent = 'Pulling Finance from Sheets…';
-  const resp = await appsScriptCall('GET', null, 25000, 'Finance');
+
+  // Find most recent local finance month
+  const latestLocal = getFinData()
+    .filter(d => d.month)
+    .map(d => d.month)
+    .sort().pop();
+
+  const params = {};
+  if (!fullPull && latestLocal) {
+    params.since = latestLocal;
+    log.textContent = `Pulling Finance entries since ${latestLocal}…`;
+  } else {
+    log.textContent = 'Pulling all Finance data from Sheets…';
+  }
+
+  const resp = await appsScriptCall('GET', null, 25000, 'Finance', params);
   if (!resp) { log.textContent = 'Finance pull failed.'; return; }
   try {
     const numericFields = ['year','monthNum','income','allowanceIncome','expDE','expTR',
@@ -2022,7 +2056,10 @@ async function pullFinFromSheets() {
     rows.forEach(e => { if (e.month) by.set(key(e), e); });
     const all = [...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month)));
     setFinData(all);
-    log.textContent = `✓ Pulled ${rows.length} finance rows. Total: ${all.length}.`;
+    const msg = !fullPull && latestLocal
+      ? `✓ Pulled ${rows.length} new Finance rows since ${latestLocal}. Total: ${all.length}.`
+      : `✓ Pulled ${rows.length} Finance rows. Total: ${all.length}.`;
+    log.textContent = msg;
     toast(`Pulled ${rows.length} finance rows`, 'ok');
     renderAll();
   } catch (e) { log.textContent = 'Parse error: ' + e.message; toast('Could not parse Finance response', 'err'); }
@@ -2218,9 +2255,11 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSheetUI();
     toast(id?'Script URL saved':'Script URL cleared', id?'ok':'info');
   });
-  document.getElementById('pullFromSheets').addEventListener('click', pullFromSheets);
+  document.getElementById('pullFromSheets').addEventListener('click', () => pullFromSheets(false));
+  document.getElementById('pullFromSheetsAll').addEventListener('click', () => pullFromSheets(true));
   document.getElementById('pushAllToSheets').addEventListener('click', pushAllToSheets);
-  document.getElementById('pullFinFromSheets').addEventListener('click', pullFinFromSheets);
+  document.getElementById('pullFinFromSheets').addEventListener('click', () => pullFinFromSheets(false));
+  document.getElementById('pullFinFromSheetsAll').addEventListener('click', () => pullFinFromSheets(true));
   document.getElementById('pushAllFinToSheets').addEventListener('click', pushAllFinToSheets);
 
   // Calendar

@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V4.0 · build 4</span>
+    <span class="version-badge">V4.0 · build 5</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -465,7 +465,8 @@
           <div class="step-body">
             <div class="step-title">Push / Pull — Daily Log</div>
             <div class="actions" style="margin-top:8px">
-              <button class="btn btn-sheets" id="pullFromSheets">↓ Pull Log from Sheets</button>
+              <button class="btn btn-sheets" id="pullFromSheets">↓ Pull new Log entries</button>
+              <button class="btn btn-secondary" id="pullFromSheetsAll" style="font-size:12px">↓ Pull all Log</button>
               <button class="btn btn-secondary" id="pushAllToSheets">↑ Push all Log data</button>
             </div>
           </div>
@@ -476,7 +477,8 @@
             <div class="step-title">Push / Pull — Finance</div>
             <div class="step-desc">Writes to a separate "Finance" tab in the same Sheet, created automatically on first use.</div>
             <div class="actions" style="margin-top:8px">
-              <button class="btn btn-sheets" id="pullFinFromSheets">↓ Pull Finance from Sheets</button>
+              <button class="btn btn-sheets" id="pullFinFromSheets">↓ Pull new Finance entries</button>
+              <button class="btn btn-secondary" id="pullFinFromSheetsAll" style="font-size:12px">↓ Pull all Finance</button>
               <button class="btn btn-secondary" id="pushAllFinToSheets">↑ Push all Finance data</button>
             </div>
             <div class="import-log" id="sheetsLog" style="margin-top:12px">No Sheets activity yet.</div>

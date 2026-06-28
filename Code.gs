@@ -61,6 +61,7 @@ function getActiveHeaders_(sheet) {
 function doGet(e) {
   try {
     const tabName = (e && e.parameter && e.parameter.tab) || LOG_TAB_NAME;
+    const since   = (e && e.parameter && e.parameter.since) || null; // "YYYY-MM-DD" or "YYYY-MM"
     const sheet = getSheet_(tabName);
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return jsonResponse_({ ok: true, rows: [] });
@@ -68,7 +69,8 @@ function doGet(e) {
     const lastCol = sheet.getLastColumn();
     const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     const dataRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-    const dateColIdx = headerRow.indexOf('date'); // only relevant for Log tab
+    const dateColIdx  = headerRow.indexOf('date');   // Log tab
+    const monthColIdx = headerRow.indexOf('month');  // Finance tab
 
     const rows = dataRows.map(r => {
       const obj = {};
@@ -78,6 +80,13 @@ function doGet(e) {
         obj[h] = v === '' ? null : v;
       });
       return obj;
+    }).filter(obj => {
+      if (!since) return true;
+      // Log tab: filter by date
+      if (dateColIdx >= 0 && obj.date) return String(obj.date) > since;
+      // Finance tab: filter by month (format "YYYY-MM")
+      if (monthColIdx >= 0 && obj.month) return String(obj.month) > since;
+      return true; // keep rows with no date/month (e.g. header seeds)
     });
 
     return jsonResponse_({ ok: true, rows });
