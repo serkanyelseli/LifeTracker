@@ -881,7 +881,13 @@ const PATTERN_METRICS = [
 function ensurePatternYearSelector() {
   const sel = document.getElementById('patternYearSelect');
   if (!sel) return;
-  const ys = allYears().sort((a,b)=>b-a);
+  // Only include years that have actual daily entries with dates
+  const ys = [...new Set(
+    getData()
+      .filter(d => d.type === 'daily' && d.date && d.year)
+      .map(d => Number(d.year))
+      .filter(y => y > 2000 && y < 2100)
+  )].sort((a,b) => b-a);
   const current = sel.value;
   sel.innerHTML = '<option value="all">All years</option>';
   ys.forEach(y => {
@@ -889,7 +895,8 @@ function ensurePatternYearSelector() {
     o.value = y; o.textContent = y;
     sel.appendChild(o);
   });
-  if (current && (current==='all' || ys.includes(Number(current)))) sel.value = current;
+  if (current && (current === 'all' || ys.includes(Number(current)))) sel.value = current;
+  else sel.value = 'all';
 }
 
 /* Returns daily rows, optionally filtered by year */
@@ -903,9 +910,14 @@ function patternRows(yearFilter) {
 function calcDowAverages(rows, metricKey, calcScore) {
   const buckets = Array.from({length:7}, ()=>[]);
   rows.forEach(d => {
-    const date = new Date(d.date + 'T00:00:00');
-    // getDay(): 0=Sun,1=Mon…6=Sat → convert to Mon=0…Sun=6
-    const dow = (date.getDay() + 6) % 7;
+    if (!d.date) return;
+    // Ensure date is in YYYY-MM-DD format before parsing
+    const dateStr = d.date.includes('.') 
+      ? d.date.split('.').reverse().join('-')  // convert DD.MM.YYYY → YYYY-MM-DD
+      : d.date;
+    const date = new Date(dateStr + 'T00:00:00');
+    if (isNaN(date.getTime())) return; // skip invalid dates
+    const dow = (date.getDay() + 6) % 7; // Mon=0 … Sun=6
     let val;
     if (metricKey === 'tvMovies') {
       val = (parseNum(d.tv) ?? 0) + (parseNum(d.movies) ?? 0);
@@ -918,7 +930,7 @@ function calcDowAverages(rows, metricKey, calcScore) {
     } else {
       val = parseNum(d[metricKey]);
     }
-    if (val !== null) buckets[dow].push(val);
+    if (val !== null && !isNaN(val)) buckets[dow].push(val);
   });
   return buckets.map(b => b.length ? round1(b.reduce((s,v)=>s+v,0)/b.length) : null);
 }
@@ -992,7 +1004,7 @@ function renderPatterns() {
   const yearFilter = document.getElementById('patternYearSelect')?.value || 'all';
   const rows = patternRows(yearFilter);
   const label = yearFilter === 'all' ? `all years (${rows.length} days)` : `${yearFilter} (${rows.length} days)`;
-  document.querySelector('#patterns .panel-title').textContent = `Weekly Patterns — ${label}`;
+  document.getElementById('patternTitle').textContent = `Weekly Patterns — ${label}`;
   // Defer chart rendering so section is visible and canvases have real pixel dimensions
   setTimeout(() => {
     PATTERN_METRICS.forEach(m => renderPatternChart(m, rows));
