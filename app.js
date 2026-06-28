@@ -1351,63 +1351,60 @@ function renderRecords() {
    STREAKS
 ════════════════════════════════════════════ */
 const STREAK_METRICS = [
-  { key:'workout',   label:'Workout',       icon:'💪', test: d => (parseNum(d.workout) ?? 0) > 0    },
-  { key:'reading',   label:'Reading',       icon:'📖', test: d => (parseNum(d.reading) ?? 0) > 0    },
-  { key:'water',     label:'Water ≥ 3L',    icon:'💧', test: d => (parseNum(d.water)   ?? 0) >= 3   },
-  { key:'german',    label:'German',        icon:'🇩🇪', test: d => (parseNum(d.german)  ?? 0) > 0    },
-  { key:'prayer',    label:'Full prayer',   icon:'🤲', test: d => (parseNum(d.prayTotal)?? 0) >= 7  },
-  { key:'score',     label:'Positive day',  icon:'⭐', test: d => {
-      const ns = parseNum(d.newScore) ?? (d.prayTotal!=null ? calcNewScore(d).total : null);
-      return ns !== null && ns > 0;
-    }
-  },
-  { key:'noscreen',  label:'No screen',     icon:'📵', test: d => {
-      const tv = parseNum(d.tv) ?? 0;
-      const mv = parseNum(d.movies) ?? 0;
-      return (tv + mv) === 0 && (d.tv !== null || d.movies !== null);
-    }
-  },
+  { key:'workout', label:'Workout',    icon:'💪',
+    test: d => (parseNum(d.workout) ?? 0) > 0 },
+  { key:'reading', label:'Reading',    icon:'📖',
+    test: d => (parseNum(d.reading) ?? 0) > 0 },
+  { key:'water',   label:'Water ≥ 3L', icon:'💧',
+    test: d => (parseNum(d.water)   ?? 0) >= 3,   since:'2026-06-01' },
+  { key:'german',  label:'German',     icon:'🇩🇪',
+    test: d => (parseNum(d.german)  ?? 0) > 0,    since:'2026-06-01' },
 ];
 
-function calcStreaks(dailyRows, testFn) {
-  // dailyRows must be sorted by date ascending
+function calcStreaks(rows, testFn, since) {
+  // Sort ascending, optionally filter to a start date
+  const sorted = rows
+    .filter(d => d.date && (!since || d.date >= since))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   let best = 0, bestStart = null, bestEnd = null;
-  let cur  = 0, curStart  = null;
-  let prev = null;
+  let cur  = 0, curStart  = null, curEnd = null;
 
-  dailyRows.forEach(d => {
-    if (!d.date) return;
+  for (let i = 0; i < sorted.length; i++) {
+    const d    = sorted[i];
     const pass = testFn(d);
-
-    // Check for consecutive days (allow 1-day gaps only for missing data)
-    const isConsecutive = prev && daysBetween(prev.date, d.date) === 1;
+    const prev = i > 0 ? sorted[i-1] : null;
+    const gap  = prev ? daysBetween(prev.date, d.date) : 1;
 
     if (pass) {
-      if (cur === 0 || !isConsecutive) {
-        // New streak starting
-        cur = 1;
-        curStart = d.date;
+      if (cur === 0 || gap > 1) {
+        // Start a fresh streak
+        cur = 1; curStart = d.date;
       } else {
         cur++;
       }
+      curEnd = d.date;
       if (cur > best) {
-        best = cur; bestStart = curStart; bestEnd = d.date;
+        best = cur; bestStart = curStart; bestEnd = curEnd;
       }
     } else {
-      cur = 0; curStart = null;
+      cur = 0; curStart = null; curEnd = null;
     }
-    prev = d;
-  });
+  }
 
-  // Current streak — work backwards from most recent row
+  // Current streak: how many consecutive passing days ending today or yesterday
+  const today = todayISO();
   let current = 0;
-  const today  = todayISO();
-  const sorted = [...dailyRows].reverse();
-  for (const d of sorted) {
-    if (!d.date) continue;
-    // Allow today or yesterday as the start of "current"
-    if (current === 0 && daysBetween(d.date, today) > 1) break;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const d   = sorted[i];
+    const gap = daysBetween(d.date, today);
+    if (current === 0 && gap > 1) break; // most recent day is too old
     if (testFn(d)) {
+      // Make sure it's consecutive with the previous checked row
+      if (current > 0) {
+        const next = sorted[i + 1];
+        if (next && daysBetween(d.date, next.date) > 1) break;
+      }
       current++;
     } else {
       break;
@@ -1418,45 +1415,38 @@ function calcStreaks(dailyRows, testFn) {
 }
 
 function daysBetween(a, b) {
-  // a and b are 'YYYY-MM-DD' strings
-  return Math.round((new Date(b) - new Date(a)) / 86400000);
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
 }
 
 function renderStreaks() {
   const el = document.getElementById('streaksGrid');
   if (!el) return;
 
-  const daily = getData()
-    .filter(d => d.type === 'daily' && d.date)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
+  const daily = getData().filter(d => d.type === 'daily' && d.date);
   if (!daily.length) {
     el.innerHTML = '<p style="color:var(--muted);font-size:13px">No daily data yet.</p>';
     return;
   }
 
   const cards = STREAK_METRICS.map(m => {
-    const { best, bestStart, bestEnd, current } = calcStreaks(daily, m.test);
+    const { best, bestStart, bestEnd, current } = calcStreaks(daily, m.test, m.since || null);
     if (best === 0) return null;
 
-    const bestLabel = best === 1 ? '1 day' : best + ' days';
-    const curLabel  = current > 0
-      ? (current === 1 ? '1 day 🔥' : current + ' days 🔥')
-      : 'None active';
-    const period = bestStart && bestEnd && bestStart !== bestEnd
+    const sinceNote = m.since ? ' <span style="font-size:10px;opacity:0.6">(tracked from ' + m.since + ')</span>' : '';
+    const period    = bestStart && bestEnd && bestStart !== bestEnd
       ? bestStart + ' → ' + bestEnd
       : (bestStart || '');
 
     return '<div class="record-card">' +
       '<div class="record-trophy">' + m.icon + '</div>' +
-      '<div class="record-metric">' + m.label + '</div>' +
-      '<div class="record-value">' + bestLabel + '</div>' +
-      '<div class="record-when" style="font-size:11px;margin-top:2px">' +
-        '🏆 Best  · ' + period +
-      '</div>' +
+      '<div class="record-metric">' + m.label + sinceNote + '</div>' +
+      '<div class="record-value">' + best + (best === 1 ? ' day' : ' days') + '</div>' +
+      '<div class="record-when" style="font-size:11px;margin-top:2px">🏆 Best · ' + period + '</div>' +
       '<div class="record-note" style="margin-top:4px;color:' +
         (current > 0 ? 'var(--green)' : 'var(--muted)') + '">' +
-        'Now: ' + curLabel +
+        'Now: ' + (current > 0
+          ? current + (current === 1 ? ' day 🔥' : ' days 🔥')
+          : 'Not active') +
       '</div>' +
     '</div>';
   }).filter(Boolean);
