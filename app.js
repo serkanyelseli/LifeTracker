@@ -1685,7 +1685,9 @@ async function fetchEurTry() {
   if (cached && age < 12) return Number(cached);
 
   try {
-    const resp = await fetch('https://api.frankfurter.dev/v2/rates?base=EUR&quotes=TRY', { signal: AbortSignal.timeout(5000) });
+    // Frankfurter v1 — ECB-based, no API key, TRY supported
+    const resp = await fetch('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=TRY');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     const rate = data?.rates?.TRY;
     if (rate) {
@@ -1694,8 +1696,8 @@ async function fetchEurTry() {
       return rate;
     }
   } catch(e) {
-    // Silently fall back to cached value if available
-    if (cached) return Number(cached);
+    console.warn('EUR/TRY fetch failed:', e.message);
+    if (cached) return Number(cached); // fall back to stale cache
   }
   return null;
 }
