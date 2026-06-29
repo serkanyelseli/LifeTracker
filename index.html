@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V4.0 · build 10</span>
+    <span class="version-badge">V4.0 · build 11</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -234,6 +234,19 @@
 
           <div class="field-group wide"><label>Notes</label><textarea id="finNotes" placeholder="Optional notes about this month..."></textarea></div>
 
+          <!-- Holdings snapshot -->
+          <div class="entry-section-title" style="grid-column:1/-1;margin-top:8px;padding-top:12px;border-top:1px solid var(--border2);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase">
+            💰 End-of-month holdings snapshot
+          </div>
+          <div class="field-group">
+            <label>€ Holdings (k€)</label>
+            <input type="number" id="finHoldingEur" step="0.001" placeholder="e.g. 71.5" />
+          </div>
+          <div class="field-group">
+            <label>TL Holdings (k₺)</label>
+            <input type="number" id="finHoldingTry" step="0.1" placeholder="e.g. 5300" />
+          </div>
+
           <div class="wide actions">
             <button type="submit" class="btn btn-primary">Save Month</button>
             <button type="button" id="loadFinMonth" class="btn btn-secondary">Load Month</button>
@@ -337,6 +350,10 @@
       <div class="panel">
         <div class="panel-title">Cumulative cashflow since 2008 (k€)</div>
         <div style="position:relative;height:240px"><canvas id="finDashCumulChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" id="finDashWorthTitle">Holdings & Total Worth (k€) — 2026 onward</div>
+        <div style="position:relative;height:240px"><canvas id="finDashWorthChart"></canvas></div>
       </div>
     </div>
   </section>

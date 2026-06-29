@@ -28,9 +28,9 @@ const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','t
 const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
 const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
 const FIN_ENTRY_FIELDS = ['month','income','allowanceIncome','expDE','expTR','notes',
-  ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+  'holdingEur','holdingTry', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
-  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'notes'];
+  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'holdingEur','holdingTry', 'notes'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
 // avgScore / newAvgScore: null means not tracked that year
@@ -416,17 +416,19 @@ function round3(n) { return Math.round(n * 1000) / 1000; }
 
 
 function getFinFormEntry() {
-  const month = document.getElementById('finMonth').value; // "YYYY-MM"
+  const month = document.getElementById('finMonth').value;
   if (!month) return null;
   const [y, m] = month.split('-').map(Number);
   const e = {
-    type: 'daily-fin', // monthly real entry, distinct from seeded 'monthly'/'yearly'
+    type: 'daily-fin',
     month, year: y, monthNum: m,
-    income: parseNum(document.getElementById('finIncome').value),
+    income:          parseNum(document.getElementById('finIncome').value),
     allowanceIncome: parseNum(document.getElementById('finAllowanceIncome').value),
-    expDE: parseNum(document.getElementById('finExpDE').value),
-    expTR: parseNum(document.getElementById('finExpTR').value),
-    notes: document.getElementById('finNotes').value || '',
+    expDE:           parseNum(document.getElementById('finExpDE').value),
+    expTR:           parseNum(document.getElementById('finExpTR').value),
+    holdingEur:      parseNum(document.getElementById('finHoldingEur').value),
+    holdingTry:      parseNum(document.getElementById('finHoldingTry').value),
+    notes:           document.getElementById('finNotes').value || '',
   };
   EXP_DE_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
   EXP_TR_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
@@ -434,11 +436,13 @@ function getFinFormEntry() {
 }
 
 function fillFinForm(e) {
-  document.getElementById('finIncome').value = (e && e.income!=null) ? e.income : '';
+  document.getElementById('finIncome').value          = (e && e.income!=null)          ? e.income          : '';
   document.getElementById('finAllowanceIncome').value = (e && e.allowanceIncome!=null) ? e.allowanceIncome : '';
-  document.getElementById('finExpDE').value  = (e && e.expDE!=null)  ? e.expDE  : '';
-  document.getElementById('finExpTR').value  = (e && e.expTR!=null)  ? e.expTR  : '';
-  document.getElementById('finNotes').value  = (e && e.notes) ? e.notes : '';
+  document.getElementById('finExpDE').value           = (e && e.expDE!=null)           ? e.expDE           : '';
+  document.getElementById('finExpTR').value           = (e && e.expTR!=null)           ? e.expTR           : '';
+  document.getElementById('finHoldingEur').value      = (e && e.holdingEur!=null)      ? e.holdingEur      : '';
+  document.getElementById('finHoldingTry').value      = (e && e.holdingTry!=null)      ? e.holdingTry      : '';
+  document.getElementById('finNotes').value           = (e && e.notes) ? e.notes : '';
   EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
   EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
   const hasDEParts = e && EXP_DE_PARTS.some(f => e[f] != null);
@@ -1657,7 +1661,10 @@ function renderFinDashKpis() {
     finCard('TR Payments',      a.tr,               b?.tr,              'k€', true)  +
     finCard('Net Cashflow',     netA,               netB,               'k€', false, 2, partialA) +
     '<div class="fin-card" id="fxRateCard"><div class="fin-title">EUR / TRY · Live rate</div>' +
-    '<div class="fin-value" style="font-size:1.4rem">fetching...</div></div>';
+    '<div class="fin-value" style="font-size:1.4rem">fetching...</div></div>' +
+    '<div class="fin-card" id="worthCard"><div class="fin-title">Total Worth · ' + y + '</div>' +
+    '<div class="fin-value" style="font-size:1.4rem">—</div>' +
+    '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">Waiting for rate...</div></div>';
   document.getElementById('finDashKpiGrid').innerHTML = kpiBase;
 
   // Fetch live EUR/TRY from Frankfurter (ECB-based, no API key, free)
@@ -1670,6 +1677,30 @@ function renderFinDashKpis() {
       '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
         (rate ? 'ECB · updates daily' : 'Could not fetch rate') +
       '</div>';
+
+    // Total Worth = EUR holdings + (TRY holdings / EUR_TRY rate)
+    const worthCard = document.getElementById('worthCard');
+    if (!worthCard) return;
+    const src = getFinData().find(d => d.month === y + '-' + String(new Date().getMonth()+1).padStart(2,'0'))
+      || getFinData().filter(d => d.year === Number(y) && d.type === 'daily-fin').sort((a,b)=>b.monthNum-a.monthNum)[0];
+    if (src && rate && (src.holdingEur != null || src.holdingTry != null)) {
+      const eur  = src.holdingEur ?? 0;
+      const tryK = src.holdingTry ?? 0;      // k₺
+      const tryInEur = tryK / rate;           // k₺ ÷ (₺/€) = k€
+      const worth = round3(eur + tryInEur);
+      const monthLabel = src.month;
+      worthCard.innerHTML =
+        '<div class="fin-title">Total Worth · ' + monthLabel + '</div>' +
+        '<div class="fin-value" style="font-size:1.8rem">' + worth.toFixed(1) + ' k€</div>' +
+        '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
+          '€' + eur.toFixed(1) + 'k + ' + tryK.toFixed(0) + 'k₺ @ ' + rate.toFixed(1) +
+        '</div>';
+    } else {
+      worthCard.innerHTML =
+        '<div class="fin-title">Total Worth · ' + y + '</div>' +
+        '<div class="fin-value" style="font-size:1.4rem">—</div>' +
+        '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">Enter holdings in Finance Entry</div>';
+    }
   });
 }
 
@@ -1910,6 +1941,56 @@ function renderFinDashCharts() {
       }
     }
   });
+
+  // ── Holdings & Worth chart — 2026 onward, uses live EUR/TRY rate ──
+  destroyChart('finDashWorth');
+  fetchEurTry().then(rate => {
+    if (!rate) return;
+    const allFin   = getFinData();
+    const holdings = allFin
+      .filter(d => d.type === 'daily-fin' && d.year >= 2026
+        && (d.holdingEur != null || d.holdingTry != null))
+      .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+
+    if (!holdings.length) return;
+
+    const wLabels   = holdings.map(d => d.month);
+    const eurSeries = holdings.map(d => d.holdingEur ?? null);
+    const trySeries = holdings.map(d => d.holdingTry != null ? round3(d.holdingTry / rate) : null);
+    const worthSeries = holdings.map(d => {
+      const e  = d.holdingEur  ?? 0;
+      const tl = d.holdingTry != null ? d.holdingTry / rate : 0;
+      return (d.holdingEur != null || d.holdingTry != null) ? round3(e + tl) : null;
+    });
+
+    const lineOpts = {
+      responsive:true, maintainAspectRatio:false,
+      layout:{padding:{top:16}},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#7a8ba8',font:{size:11,family:'Inter'},boxWidth:14}},
+        tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+          titleColor:'#e8edf5',bodyColor:'#7a8ba8',
+          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1) ?? '—'} k€`}},
+        datalabels:{display:false}
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}},
+          title:{display:true,text:'k€',color:'#7a8ba8',font:{size:11}}}
+      }
+    };
+
+    charts['finDashWorth'] = new Chart(document.getElementById('finDashWorthChart'), {
+      type:'line',
+      data:{ labels: wLabels, datasets:[
+        { label:'€ Holdings',      data:eurSeries,   borderColor:C.green,  backgroundColor:C.green+'22',  fill:false, tension:0.3, pointRadius:4, borderWidth:2 },
+        { label:'TL→€ (@ live)',   data:trySeries,   borderColor:C.yellow, backgroundColor:C.yellow+'22', fill:false, tension:0.3, pointRadius:4, borderWidth:2 },
+        { label:'Total Worth k€',  data:worthSeries, borderColor:C.blue,   backgroundColor:C.blue+'22',   fill:true,  tension:0.3, pointRadius:5, borderWidth:2.5 },
+      ]},
+      options: lineOpts
+    });
+  });
 }
 
 function renderFinDashboard() {
@@ -1991,7 +2072,8 @@ function importCsvText(text) {
 /* ── Finance CSV import — expects a clean header row matching FIN_EXPORT_COLS,
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
-const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR',
+  'holdingEur','holdingTry', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
