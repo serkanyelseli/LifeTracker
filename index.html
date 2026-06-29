@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V4.0 · build 11</span>
+    <span class="version-badge">V4.0 · build 12</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -245,6 +245,11 @@
           <div class="field-group">
             <label>TL Holdings (k₺)</label>
             <input type="number" id="finHoldingTry" step="0.1" placeholder="e.g. 5300" />
+          </div>
+          <div class="field-group">
+            <label>EUR/TRY rate at month-end</label>
+            <input type="number" id="finEurTryRate" step="0.01" placeholder="e.g. 51.50" />
+            <span style="font-size:11px;color:var(--muted)">Auto-filled with live rate · edit for historical months</span>
           </div>
 
           <div class="wide actions">

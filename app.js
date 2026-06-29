@@ -28,9 +28,9 @@ const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','t
 const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
 const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
 const FIN_ENTRY_FIELDS = ['month','income','allowanceIncome','expDE','expTR','notes',
-  'holdingEur','holdingTry', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+  'holdingEur','holdingTry','eurTryRate', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
-  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'holdingEur','holdingTry', 'notes'];
+  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'holdingEur','holdingTry','eurTryRate','notes'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
 // avgScore / newAvgScore: null means not tracked that year
@@ -428,6 +428,7 @@ function getFinFormEntry() {
     expTR:           parseNum(document.getElementById('finExpTR').value),
     holdingEur:      parseNum(document.getElementById('finHoldingEur').value),
     holdingTry:      parseNum(document.getElementById('finHoldingTry').value),
+    eurTryRate:      parseNum(document.getElementById('finEurTryRate').value),
     notes:           document.getElementById('finNotes').value || '',
   };
   EXP_DE_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
@@ -442,6 +443,7 @@ function fillFinForm(e) {
   document.getElementById('finExpTR').value           = (e && e.expTR!=null)           ? e.expTR           : '';
   document.getElementById('finHoldingEur').value      = (e && e.holdingEur!=null)      ? e.holdingEur      : '';
   document.getElementById('finHoldingTry').value      = (e && e.holdingTry!=null)      ? e.holdingTry      : '';
+  document.getElementById('finEurTryRate').value      = (e && e.eurTryRate!=null)      ? e.eurTryRate      : '';
   document.getElementById('finNotes').value           = (e && e.notes) ? e.notes : '';
   EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
   EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
@@ -449,6 +451,14 @@ function fillFinForm(e) {
   const hasTRParts = e && EXP_TR_PARTS.some(f => e[f] != null);
   setBreakdownExpanded('expDE', hasDEParts);
   setBreakdownExpanded('expTR', hasTRParts);
+  // Auto-fill EUR/TRY rate with live rate if field is empty
+  if (!document.getElementById('finEurTryRate').value) {
+    fetchEurTry().then(rate => {
+      if (rate && !document.getElementById('finEurTryRate').value) {
+        document.getElementById('finEurTryRate').value = rate.toFixed(2);
+      }
+    });
+  }
 }
 function blankFinForm(keepMonth=false) {
   const m = document.getElementById('finMonth').value;
@@ -1678,22 +1688,24 @@ function renderFinDashKpis() {
         (rate ? 'ECB · updates daily' : 'Could not fetch rate') +
       '</div>';
 
-    // Total Worth = EUR holdings + (TRY holdings / EUR_TRY rate)
+    // Total Worth = EUR holdings + (TRY holdings / rate at that month)
     const worthCard = document.getElementById('worthCard');
     if (!worthCard) return;
-    const src = getFinData().find(d => d.month === y + '-' + String(new Date().getMonth()+1).padStart(2,'0'))
-      || getFinData().filter(d => d.year === Number(y) && d.type === 'daily-fin').sort((a,b)=>b.monthNum-a.monthNum)[0];
-    if (src && rate && (src.holdingEur != null || src.holdingTry != null)) {
-      const eur  = src.holdingEur ?? 0;
-      const tryK = src.holdingTry ?? 0;      // k₺
-      const tryInEur = tryK / rate;           // k₺ ÷ (₺/€) = k€
-      const worth = round3(eur + tryInEur);
-      const monthLabel = src.month;
+    const src = getFinData().filter(d => d.year === Number(y) && d.type === 'daily-fin'
+        && (d.holdingEur != null || d.holdingTry != null))
+      .sort((a,b) => b.monthNum - a.monthNum)[0];
+    if (src && (src.holdingEur != null || src.holdingTry != null)) {
+      const usedRate = src.eurTryRate || rate; // stored rate first, live rate as fallback
+      const eur      = src.holdingEur ?? 0;
+      const tryK     = src.holdingTry ?? 0;
+      const tryInEur = usedRate ? tryK / usedRate : 0;
+      const worth    = round3(eur + tryInEur);
+      const rateNote = src.eurTryRate ? src.month + ' rate' : 'live rate';
       worthCard.innerHTML =
-        '<div class="fin-title">Total Worth · ' + monthLabel + '</div>' +
+        '<div class="fin-title">Total Worth · ' + src.month + '</div>' +
         '<div class="fin-value" style="font-size:1.8rem">' + worth.toFixed(1) + ' k€</div>' +
         '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
-          '€' + eur.toFixed(1) + 'k + ' + tryK.toFixed(0) + 'k₺ @ ' + rate.toFixed(1) +
+          '€' + eur.toFixed(1) + 'k + ' + tryK.toFixed(0) + 'k₺ @ ' + (usedRate ? usedRate.toFixed(1) : '—') + ' (' + rateNote + ')' +
         '</div>';
     } else {
       worthCard.innerHTML =
@@ -1955,11 +1967,15 @@ function renderFinDashCharts() {
     if (!holdings.length) return;
 
     const wLabels   = holdings.map(d => d.month);
-    const eurSeries = holdings.map(d => d.holdingEur ?? null);
-    const trySeries = holdings.map(d => d.holdingTry != null ? round3(d.holdingTry / rate) : null);
+    const eurSeries   = holdings.map(d => d.holdingEur ?? null);
+    const trySeries   = holdings.map(d => {
+      const r = d.eurTryRate || rate; // stored rate first, live as fallback
+      return (d.holdingTry != null && r) ? round3(d.holdingTry / r) : null;
+    });
     const worthSeries = holdings.map(d => {
-      const e  = d.holdingEur  ?? 0;
-      const tl = d.holdingTry != null ? d.holdingTry / rate : 0;
+      const r   = d.eurTryRate || rate;
+      const e   = d.holdingEur  ?? 0;
+      const tl  = (d.holdingTry != null && r) ? d.holdingTry / r : 0;
       return (d.holdingEur != null || d.holdingTry != null) ? round3(e + tl) : null;
     });
 
@@ -2073,7 +2089,7 @@ function importCsvText(text) {
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
 const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR',
-  'holdingEur','holdingTry', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+  'holdingEur','holdingTry','eurTryRate', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
