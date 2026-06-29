@@ -1649,13 +1649,55 @@ function renderFinDashKpis() {
     </div>`;
   }
 
-  document.getElementById('finDashKpiGrid').innerHTML =
-    finCard('Income',           a.income, b?.income, 'k€', false) +
-    finCard('Allowance Income', a.allowanceIncome, b?.allowanceIncome, 'k€', false) +
-    finCard('Expenses DE',      a.expDE,  b?.expDE,  'k€', true)  +
-    finCard('TR Payments',      a.tr,     b?.tr,      'k€', true)  +
-    finCard('Net Cashflow',     netA,     netB,       'k€', false, 2, partialA) +
-    finCard('Savings Rate',     savingsA, savingsB,   '%',  false, 1, partialA);
+  // Render KPIs first without the FX card, then update when rate arrives
+  const kpiBase =
+    finCard('Income',           a.income,          b?.income,          'k€', false) +
+    finCard('Allowance Income', a.allowanceIncome,  b?.allowanceIncome, 'k€', false) +
+    finCard('Expenses DE',      a.expDE,            b?.expDE,           'k€', true)  +
+    finCard('TR Payments',      a.tr,               b?.tr,              'k€', true)  +
+    finCard('Net Cashflow',     netA,               netB,               'k€', false, 2, partialA) +
+    '<div class="fin-card" id="fxRateCard"><div class="fin-title">EUR / TRY · Live rate</div>' +
+    '<div class="fin-value" style="font-size:1.4rem">fetching...</div></div>';
+  document.getElementById('finDashKpiGrid').innerHTML = kpiBase;
+
+  // Fetch live EUR/TRY from Frankfurter (ECB-based, no API key, free)
+  fetchEurTry().then(rate => {
+    const card = document.getElementById('fxRateCard');
+    if (!card) return;
+    card.innerHTML =
+      '<div class="fin-title">EUR / TRY · Live rate</div>' +
+      '<div class="fin-value" style="font-size:1.8rem">' + (rate ? rate.toFixed(2) + ' ₺' : '—') + '</div>' +
+      '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
+        (rate ? 'ECB · updates daily' : 'Could not fetch rate') +
+      '</div>';
+  });
+}
+
+/* Fetch EUR/TRY from Frankfurter — no API key needed, ECB-based */
+async function fetchEurTry() {
+  const CACHE_KEY = 'eurTryRate';
+  const CACHE_TS  = 'eurTryRateTs';
+  const cached    = localStorage.getItem(CACHE_KEY);
+  const cachedTs  = Number(localStorage.getItem(CACHE_TS) || 0);
+  const age       = (Date.now() - cachedTs) / 3600000; // hours
+
+  // Use cached value if less than 12 hours old
+  if (cached && age < 12) return Number(cached);
+
+  try {
+    const resp = await fetch('https://api.frankfurter.dev/v2/rates?base=EUR&quotes=TRY', { signal: AbortSignal.timeout(5000) });
+    const data = await resp.json();
+    const rate = data?.rates?.TRY;
+    if (rate) {
+      localStorage.setItem(CACHE_KEY, String(rate));
+      localStorage.setItem(CACHE_TS, String(Date.now()));
+      return rate;
+    }
+  } catch(e) {
+    // Silently fall back to cached value if available
+    if (cached) return Number(cached);
+  }
+  return null;
 }
 
 function renderFinDashCharts() {
@@ -2355,6 +2397,19 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.removeItem(FIN_STORAGE_KEY);
     localStorage.removeItem('serkanFinanceSeeded_v2');
     toast('App data cleared','err');
+    renderAll();
+  });
+  document.getElementById('clearDaily').addEventListener('click', () => {
+    if (!confirm('Clear daily log only? Finance data will be kept.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    toast('Daily log cleared','err');
+    renderAll();
+  });
+  document.getElementById('clearFinance').addEventListener('click', () => {
+    if (!confirm('Clear finance data only? Daily log will be kept.')) return;
+    localStorage.removeItem(FIN_STORAGE_KEY);
+    localStorage.removeItem('serkanFinanceSeeded_v2');
+    toast('Finance data cleared','err');
     renderAll();
   });
 
