@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V4.0 · build 12</span>
+    <span class="version-badge">V4.0 · build 13</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -197,39 +197,24 @@
             </div>
           </div>
 
-          <!-- Expenses TR breakdown — two clusters: Mom (Bursa house) + Others -->
-          <div class="field-group wide prayer-widget">
-            <div class="prayer-header" id="expTRToggle">
-              <label style="margin-bottom:0">TR Payments total (k€)</label>
-              <button type="button" class="prayer-toggle-btn" id="expTRToggleBtn" aria-expanded="false">
-                <span id="expTRToggleIcon">▸</span> Breakdown
-              </button>
-            </div>
-            <input type="number" id="finExpTR" step="0.001" readonly />
-            <div class="prayer-breakdown" id="expTRBreakdown" style="display:none">
-
-              <p class="cluster-label">Mom (Bursa house)</p>
-              <div class="prayer-grid">
-                <div class="field-group"><label>Aidat</label><input type="number" class="exptr-part" id="trAidat" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Elektrik</label><input type="number" class="exptr-part" id="trElektrik" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Su</label><input type="number" class="exptr-part" id="trSu" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Doğalgaz</label><input type="number" class="exptr-part" id="trDogalgaz" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Internet</label><input type="number" class="exptr-part" id="trInternet" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Various</label><input type="number" class="exptr-part" id="trMomVarious" step="0.001" min="0" /></div>
+          <!-- Expenses TR — enter in Turkish Lira, auto-converts to € using month's rate -->
+          <div class="field-group wide">
+            <label style="margin-bottom:6px">TR Payments (enter in ₺, converts to €)</label>
+            <div class="prayer-grid">
+              <div class="field-group">
+                <label>Mom (k₺)</label>
+                <input type="number" id="finTrMomTl" class="tr-tl-input" step="0.1" min="0" placeholder="e.g. 720" />
               </div>
-
-              <p class="cluster-label" style="margin-top:14px">Others</p>
-              <div class="prayer-grid">
-                <div class="field-group"><label>Emlak Vergisi</label><input type="number" class="exptr-part" id="trEmlakVergisi" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Google</label><input type="number" class="exptr-part" id="trGoogle" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Spotify Premium</label><input type="number" class="exptr-part" id="trSpotify" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Youtube</label><input type="number" class="exptr-part" id="trYoutube" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Amazon TR</label><input type="number" class="exptr-part" id="trAmazonTR" step="0.001" min="0" /></div>
-                <div class="field-group"><label>Various</label><input type="number" class="exptr-part" id="trOthersVarious" step="0.001" min="0" /></div>
+              <div class="field-group">
+                <label>Others (k₺)</label>
+                <input type="number" id="finTrOthersTl" class="tr-tl-input" step="0.1" min="0" placeholder="e.g. 315" />
               </div>
-
-              <p class="prayer-hint" style="margin-top:14px">All amounts in k€ (thousands of euros) · both clusters sum into TR Payments total above</p>
             </div>
+            <div style="margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;color:var(--muted)">
+              TR Payments total: <span id="finExpTRDisplay" style="color:var(--text);font-weight:600">— k€</span>
+              <span id="finTrRateNote" style="opacity:0.7"></span>
+            </div>
+            <input type="hidden" id="finExpTR" />
           </div>
 
           <div class="field-group wide"><label>Notes</label><textarea id="finNotes" placeholder="Optional notes about this month..."></textarea></div>
@@ -446,8 +431,8 @@
         <button class="btn btn-secondary" id="exportFinCsv">Export Finance backup CSV</button>
         <button class="btn btn-secondary" id="exportJson">Export full JSON backup</button>
         <button class="btn btn-danger" id="clearAll">Clear all app data</button>
-        <button class="btn btn-danger" id="clearDaily" style="background:#b45309">Clear daily log only</button>
-        <button class="btn btn-danger" id="clearFinance" style="background:#b45309">Clear finance only</button>
+        <button class="btn btn-secondary" id="clearDaily">Clear daily log only</button>
+        <button class="btn btn-secondary" id="clearFinance">Clear finance only</button>
       </div>
       <p style="font-size:12px;color:var(--muted);margin-top:12px">
         Header row: Wk, Date, Day, Month, Year · Sub-header: S/Ö/İk/Ak/Y/Nf/T and Read, TvS, Mov, Tth, WO, Sleep, Wg/KG, Tgt, Delta/∆kg, Wat, Ger, Nut, B/M · Score, New Score. Monthly (AVG08_01) and yearly (AVG08) rows supported.
@@ -495,6 +480,7 @@
             <div class="actions" style="margin-top:8px">
               <button class="btn btn-sheets" id="pullFromSheets">↓ Pull new Log entries</button>
               <button class="btn btn-secondary" id="pullFromSheetsAll" style="font-size:12px">↓ Pull all Log</button>
+              <button class="btn btn-sheets" id="pushNewToSheets">↑ Push new Log</button>
               <button class="btn btn-secondary" id="pushAllToSheets">↑ Push all Log data</button>
             </div>
           </div>
@@ -507,6 +493,7 @@
             <div class="actions" style="margin-top:8px">
               <button class="btn btn-sheets" id="pullFinFromSheets">↓ Pull new Finance entries</button>
               <button class="btn btn-secondary" id="pullFinFromSheetsAll" style="font-size:12px">↓ Pull all Finance</button>
+              <button class="btn btn-sheets" id="pushNewFinToSheets">↑ Push new Finance</button>
               <button class="btn btn-secondary" id="pushAllFinToSheets">↑ Push all Finance data</button>
             </div>
             <div class="import-log" id="sheetsLog" style="margin-top:12px">No Sheets activity yet.</div>

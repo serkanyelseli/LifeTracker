@@ -28,9 +28,9 @@ const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','t
 const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
 const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
 const FIN_ENTRY_FIELDS = ['month','income','allowanceIncome','expDE','expTR','notes',
-  'holdingEur','holdingTry','eurTryRate', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+  'holdingEur','holdingTry','eurTryRate','trMomTl','trOthersTl', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
-  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'holdingEur','holdingTry','eurTryRate','notes'];
+  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'trMomTl','trOthersTl','holdingEur','holdingTry','eurTryRate','notes'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
 // avgScore / newAvgScore: null means not tracked that year
@@ -405,12 +405,7 @@ function syncExpDETotal() {
   }
 }
 function syncExpTRTotal() {
-  const parts = EXP_TR_PARTS.map(f => parseNum(document.getElementById(f)?.value));
-  const anyEntered = parts.some(v => v !== null);
-  if (anyEntered) {
-    const sum = parts.reduce((s,v) => s + (v ?? 0), 0);
-    document.getElementById('finExpTR').value = round3(sum);
-  }
+  // Deprecated — TR is now entered in TL and converted via updateTrDisplay().
 }
 function round3(n) { return Math.round(n * 1000) / 1000; }
 
@@ -419,20 +414,35 @@ function getFinFormEntry() {
   const month = document.getElementById('finMonth').value;
   if (!month) return null;
   const [y, m] = month.split('-').map(Number);
+  const rate = parseNum(document.getElementById('finEurTryRate').value);
+  const momTl    = parseNum(document.getElementById('finTrMomTl').value);
+  const othersTl = parseNum(document.getElementById('finTrOthersTl').value);
+
+  // Convert TL → € using this month's rate
+  const momEur    = (momTl != null && rate) ? round3(momTl / rate) : null;
+  const othersEur = (othersTl != null && rate) ? round3(othersTl / rate) : null;
+  const expTR = (momEur != null || othersEur != null)
+    ? round3((momEur ?? 0) + (othersEur ?? 0))
+    : null;
+
   const e = {
     type: 'daily-fin',
     month, year: y, monthNum: m,
     income:          parseNum(document.getElementById('finIncome').value),
     allowanceIncome: parseNum(document.getElementById('finAllowanceIncome').value),
     expDE:           parseNum(document.getElementById('finExpDE').value),
-    expTR:           parseNum(document.getElementById('finExpTR').value),
+    expTR:           expTR,
+    trMomTl:         momTl,
+    trOthersTl:      othersTl,
+    // Keep €-converted cluster totals for chart compatibility
+    trMomVarious:    momEur,
+    trOthersVarious: othersEur,
     holdingEur:      parseNum(document.getElementById('finHoldingEur').value),
     holdingTry:      parseNum(document.getElementById('finHoldingTry').value),
-    eurTryRate:      parseNum(document.getElementById('finEurTryRate').value),
+    eurTryRate:      rate,
     notes:           document.getElementById('finNotes').value || '',
   };
   EXP_DE_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
-  EXP_TR_PARTS.forEach(f => e[f] = parseNum(document.getElementById(f)?.value));
   return e;
 }
 
@@ -440,25 +450,62 @@ function fillFinForm(e) {
   document.getElementById('finIncome').value          = (e && e.income!=null)          ? e.income          : '';
   document.getElementById('finAllowanceIncome').value = (e && e.allowanceIncome!=null) ? e.allowanceIncome : '';
   document.getElementById('finExpDE').value           = (e && e.expDE!=null)           ? e.expDE           : '';
-  document.getElementById('finExpTR').value           = (e && e.expTR!=null)           ? e.expTR           : '';
   document.getElementById('finHoldingEur').value      = (e && e.holdingEur!=null)      ? e.holdingEur      : '';
   document.getElementById('finHoldingTry').value      = (e && e.holdingTry!=null)      ? e.holdingTry      : '';
   document.getElementById('finEurTryRate').value      = (e && e.eurTryRate!=null)      ? e.eurTryRate      : '';
   document.getElementById('finNotes').value           = (e && e.notes) ? e.notes : '';
+
+  // TR TL fields — prefer stored TL, otherwise back-calculate from € using rate
+  let momTl = e?.trMomTl, othersTl = e?.trOthersTl;
+  if (momTl == null && e?.trMomVarious != null && e?.eurTryRate) momTl = round3(e.trMomVarious * e.eurTryRate);
+  if (othersTl == null && e?.trOthersVarious != null && e?.eurTryRate) othersTl = round3(e.trOthersVarious * e.eurTryRate);
+  document.getElementById('finTrMomTl').value    = (momTl != null)    ? momTl    : '';
+  document.getElementById('finTrOthersTl').value = (othersTl != null) ? othersTl : '';
+
+  document.getElementById('finExpTR').value = (e && e.expTR!=null) ? e.expTR : '';
   EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
-  EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.value = (e && e[f]!=null) ? e[f] : ''; });
   const hasDEParts = e && EXP_DE_PARTS.some(f => e[f] != null);
-  const hasTRParts = e && EXP_TR_PARTS.some(f => e[f] != null);
   setBreakdownExpanded('expDE', hasDEParts);
-  setBreakdownExpanded('expTR', hasTRParts);
-  // Auto-fill EUR/TRY rate with live rate if field is empty
+
+  // Auto-fill EUR/TRY rate with live rate if empty, then update TR display
   if (!document.getElementById('finEurTryRate').value) {
     fetchEurTry().then(rate => {
       if (rate && !document.getElementById('finEurTryRate').value) {
         document.getElementById('finEurTryRate').value = rate.toFixed(2);
+        updateTrDisplay();
       }
     });
   }
+  updateTrDisplay();
+}
+
+/* Recompute and show TR Payments total (€) from TL inputs and current rate */
+function updateTrDisplay() {
+  const rate     = parseNum(document.getElementById('finEurTryRate')?.value);
+  const momTl    = parseNum(document.getElementById('finTrMomTl')?.value);
+  const othersTl = parseNum(document.getElementById('finTrOthersTl')?.value);
+  const disp     = document.getElementById('finExpTRDisplay');
+  const note     = document.getElementById('finTrRateNote');
+  const hidden   = document.getElementById('finExpTR');
+  if (!disp) return;
+
+  if ((momTl == null && othersTl == null)) {
+    disp.textContent = '— k€';
+    if (note) note.textContent = '';
+    if (hidden) hidden.value = '';
+    return;
+  }
+  if (!rate) {
+    disp.textContent = 'need rate';
+    if (note) note.textContent = ' · enter EUR/TRY rate above';
+    if (hidden) hidden.value = '';
+    return;
+  }
+  const totalTl = (momTl ?? 0) + (othersTl ?? 0);
+  const eur = round3(totalTl / rate);
+  disp.textContent = eur.toFixed(2) + ' k€';
+  if (note) note.textContent = ' · ' + totalTl.toFixed(0) + 'k₺ @ ' + rate.toFixed(1);
+  if (hidden) hidden.value = eur;
 }
 function blankFinForm(keepMonth=false) {
   const m = document.getElementById('finMonth').value;
@@ -1677,43 +1724,70 @@ function renderFinDashKpis() {
     '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">Waiting for rate...</div></div>';
   document.getElementById('finDashKpiGrid').innerHTML = kpiBase;
 
-  // Fetch live EUR/TRY from Frankfurter (ECB-based, no API key, free)
+  // ── Worth card: calculate immediately using the STORED per-month rate ──
+  // This does NOT depend on the live fetch, so it always renders if holdings exist.
+  renderWorthCard(y);
+
+  // ── Live EUR/TRY rate: fetch separately, update its own card + worth fallback ──
   fetchEurTry().then(rate => {
     const card = document.getElementById('fxRateCard');
-    if (!card) return;
-    card.innerHTML =
-      '<div class="fin-title">EUR / TRY · Live rate</div>' +
-      '<div class="fin-value" style="font-size:1.8rem">' + (rate ? rate.toFixed(2) + ' ₺' : '—') + '</div>' +
-      '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
-        (rate ? 'ECB · updates daily' : 'Could not fetch rate') +
-      '</div>';
-
-    // Total Worth = EUR holdings + (TRY holdings / rate at that month)
-    const worthCard = document.getElementById('worthCard');
-    if (!worthCard) return;
-    const src = getFinData().filter(d => d.year === Number(y) && d.type === 'daily-fin'
-        && (d.holdingEur != null || d.holdingTry != null))
-      .sort((a,b) => b.monthNum - a.monthNum)[0];
-    if (src && (src.holdingEur != null || src.holdingTry != null)) {
-      const usedRate = src.eurTryRate || rate; // stored rate first, live rate as fallback
-      const eur      = src.holdingEur ?? 0;
-      const tryK     = src.holdingTry ?? 0;
-      const tryInEur = usedRate ? tryK / usedRate : 0;
-      const worth    = round3(eur + tryInEur);
-      const rateNote = src.eurTryRate ? src.month + ' rate' : 'live rate';
-      worthCard.innerHTML =
-        '<div class="fin-title">Total Worth · ' + src.month + '</div>' +
-        '<div class="fin-value" style="font-size:1.8rem">' + worth.toFixed(1) + ' k€</div>' +
+    if (card) {
+      card.innerHTML =
+        '<div class="fin-title">EUR / TRY · Live rate</div>' +
+        '<div class="fin-value" style="font-size:1.8rem">' + (rate ? rate.toFixed(2) + ' ₺' : '—') + '</div>' +
         '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
-          '€' + eur.toFixed(1) + 'k + ' + tryK.toFixed(0) + 'k₺ @ ' + (usedRate ? usedRate.toFixed(1) : '—') + ' (' + rateNote + ')' +
+          (rate ? 'ECB · updates daily' : 'Could not fetch rate') +
         '</div>';
-    } else {
-      worthCard.innerHTML =
-        '<div class="fin-title">Total Worth · ' + y + '</div>' +
-        '<div class="fin-value" style="font-size:1.4rem">—</div>' +
-        '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">Enter holdings in Finance Entry</div>';
     }
+    // Re-render worth card with live rate available as fallback for months missing a stored rate
+    renderWorthCard(y, rate);
+  }).catch(() => {
+    // Even if fetch throws, worth card is already rendered from stored rates
   });
+}
+
+/* Render the Total Worth card. Uses stored per-month rate first; liveRate is
+   only a fallback for months that have holdings but no saved eurTryRate. */
+function renderWorthCard(y, liveRate) {
+  const worthCard = document.getElementById('worthCard');
+  if (!worthCard) return;
+
+  const src = getFinData()
+    .filter(d => d.year === Number(y) && d.type === 'daily-fin'
+      && (d.holdingEur != null || d.holdingTry != null))
+    .sort((a, b) => b.monthNum - a.monthNum)[0];
+
+  if (!src) {
+    worthCard.innerHTML =
+      '<div class="fin-title">Total Worth · ' + y + '</div>' +
+      '<div class="fin-value" style="font-size:1.4rem">—</div>' +
+      '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">Enter holdings in Finance Entry</div>';
+    return;
+  }
+
+  const usedRate = src.eurTryRate || liveRate || null;
+  const eur      = src.holdingEur ?? 0;
+  const tryK     = src.holdingTry ?? 0;
+
+  // If we have TL holdings but no rate at all, show a helpful message
+  if (tryK > 0 && !usedRate) {
+    worthCard.innerHTML =
+      '<div class="fin-title">Total Worth · ' + src.month + '</div>' +
+      '<div class="fin-value" style="font-size:1.4rem">€' + eur.toFixed(1) + 'k + ?</div>' +
+      '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">Add EUR/TRY rate for ' + src.month + '</div>';
+    return;
+  }
+
+  const tryInEur = usedRate ? tryK / usedRate : 0;
+  const worth    = round3(eur + tryInEur);
+  const rateNote = src.eurTryRate ? (src.month + ' rate') : 'live rate';
+
+  worthCard.innerHTML =
+    '<div class="fin-title">Total Worth · ' + src.month + '</div>' +
+    '<div class="fin-value" style="font-size:1.8rem">' + worth.toFixed(1) + ' k€</div>' +
+    '<div class="fin-delta neutral" style="margin-top:6px;font-size:11px">' +
+      '€' + eur.toFixed(1) + 'k + ' + tryK.toFixed(0) + 'k₺ @ ' + (usedRate ? usedRate.toFixed(1) : '—') + ' (' + rateNote + ')' +
+    '</div>';
 }
 
 /* Fetch EUR/TRY from Frankfurter — no API key needed, ECB-based */
@@ -2089,7 +2163,7 @@ function importCsvText(text) {
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
 const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR',
-  'holdingEur','holdingTry','eurTryRate', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+  'holdingEur','holdingTry','eurTryRate','trMomTl','trOthersTl', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
@@ -2270,6 +2344,47 @@ async function pushAllToSheets() {
   toast('All data pushed', 'ok');
 }
 
+/* Push only daily rows newer than the latest date already in Sheets. */
+async function pushNewToSheets() {
+  const log = document.getElementById('sheetsLog');
+  log.textContent = 'Checking latest date in Sheets…';
+
+  // Ask the sheet for its most recent row (pull with a far-future since returns nothing,
+  // so instead we pull everything-after the local second-to-last as a cheap probe).
+  // Simpler: read the whole Log tab's max date via a dedicated GET.
+  const probe = await appsScriptCall('GET', null, 25000, 'Log', { latest: '1' });
+  if (!probe) { log.textContent = 'Push-new failed: could not read Sheets.'; return; }
+  const sheetLatest = probe.latest || '';
+
+  const local = getData()
+    .filter(d => d.type === 'daily' && d.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const toPush = sheetLatest
+    ? local.filter(d => d.date > sheetLatest)
+    : local; // if sheet empty, push everything
+
+  if (!toPush.length) {
+    log.textContent = `✓ Nothing new to push. Sheets already has up to ${sheetLatest || '(empty)'}.`;
+    toast('Already up to date', 'ok');
+    return;
+  }
+
+  const CHUNK = 150;
+  const chunks = [];
+  for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
+
+  let written = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    log.textContent = `Pushing new batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
+    const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Log');
+    if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} new rows written.`; return; }
+    written += resp.written ?? chunks[i].length;
+  }
+  log.textContent = `✓ Pushed ${written} new rows (since ${sheetLatest || 'start'}).`;
+  toast(`Pushed ${written} new rows`, 'ok');
+}
+
 /* ── Finance tab push/pull (separate "Finance" sheet tab) ── */
 async function pushFinEntryToSheets(entry) {
   const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Finance');
@@ -2336,6 +2451,44 @@ async function pushAllFinToSheets() {
   }
   log.textContent = `✓ Pushed ${totalWritten} finance rows in ${chunks.length} batch(es).`;
   toast('All finance data pushed', 'ok');
+}
+
+/* Push only finance rows newer than the latest month already in Sheets. */
+async function pushNewFinToSheets() {
+  const log = document.getElementById('sheetsLog');
+  log.textContent = 'Checking latest month in Sheets…';
+
+  const probe = await appsScriptCall('GET', null, 25000, 'Finance', { latest: '1' });
+  if (!probe) { log.textContent = 'Push-new failed: could not read Sheets.'; return; }
+  const sheetLatest = probe.latest || '';
+
+  const local = getFinData()
+    .filter(d => d.month)
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+
+  const toPush = sheetLatest
+    ? local.filter(d => String(d.month) > sheetLatest)
+    : local;
+
+  if (!toPush.length) {
+    log.textContent = `✓ Nothing new to push. Sheets has up to ${sheetLatest || '(empty)'}.`;
+    toast('Already up to date', 'ok');
+    return;
+  }
+
+  const CHUNK = 150;
+  const chunks = [];
+  for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
+
+  let written = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    log.textContent = `Pushing new finance batch ${i+1}/${chunks.length}…`;
+    const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Finance');
+    if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} rows written.`; return; }
+    written += resp.written ?? chunks[i].length;
+  }
+  log.textContent = `✓ Pushed ${written} new finance rows (since ${sheetLatest || 'start'}).`;
+  toast(`Pushed ${written} new finance rows`, 'ok');
 }
 
 function updateSheetUI() {
@@ -2405,14 +2558,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('finMonth').value = curMonth;
 
   EXP_DE_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.addEventListener('input', syncExpDETotal); });
-  EXP_TR_PARTS.forEach(f => { const el=document.getElementById(f); if(el) el.addEventListener('input', syncExpTRTotal); });
+  // TR: recompute € total whenever TL amounts or the rate change
+  ['finTrMomTl','finTrOthersTl','finEurTryRate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateTrDisplay);
+  });
   document.getElementById('expDEToggleBtn').addEventListener('click', () => {
     const expanded = document.getElementById('expDEToggleBtn').getAttribute('aria-expanded') === 'true';
     setBreakdownExpanded('expDE', !expanded);
-  });
-  document.getElementById('expTRToggleBtn').addEventListener('click', () => {
-    const expanded = document.getElementById('expTRToggleBtn').getAttribute('aria-expanded') === 'true';
-    setBreakdownExpanded('expTR', !expanded);
   });
   document.getElementById('finMonth').addEventListener('change', loadSelectedFinMonth);
   document.getElementById('finEntryForm').addEventListener('submit', saveFinEntry);
@@ -2522,9 +2675,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('pullFromSheets').addEventListener('click', () => pullFromSheets(false));
   document.getElementById('pullFromSheetsAll').addEventListener('click', () => pullFromSheets(true));
+  document.getElementById('pushNewToSheets').addEventListener('click', pushNewToSheets);
   document.getElementById('pushAllToSheets').addEventListener('click', pushAllToSheets);
   document.getElementById('pullFinFromSheets').addEventListener('click', () => pullFinFromSheets(false));
   document.getElementById('pullFinFromSheetsAll').addEventListener('click', () => pullFinFromSheets(true));
+  document.getElementById('pushNewFinToSheets').addEventListener('click', pushNewFinToSheets);
   document.getElementById('pushAllFinToSheets').addEventListener('click', pushAllFinToSheets);
 
   // Calendar

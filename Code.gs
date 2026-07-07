@@ -61,16 +61,58 @@ function getActiveHeaders_(sheet) {
 function doGet(e) {
   try {
     const tabName = (e && e.parameter && e.parameter.tab) || LOG_TAB_NAME;
-    const since   = (e && e.parameter && e.parameter.since) || null; // "YYYY-MM-DD" or "YYYY-MM"
-    const sheet = getSheet_(tabName);
+    const since   = (e && e.parameter && e.parameter.since) || null;
+    const latest  = (e && e.parameter && e.parameter.latest) || null;
+    const sheet   = getSheet_(tabName);
     const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return jsonResponse_({ ok: true, rows: [] });
+    if (lastRow < 2) {
+      if (latest) return jsonResponse_({ ok: true, latest: '' });
+      return jsonResponse_({ ok: true, rows: [] });
+    }
 
-    const lastCol = sheet.getLastColumn();
-    const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-    const dataRows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-    const dateColIdx  = headerRow.indexOf('date');   // Log tab
-    const monthColIdx = headerRow.indexOf('month');  // Finance tab
+    const lastCol    = sheet.getLastColumn();
+    const headerRow  = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    const dateColIdx = headerRow.indexOf('date');
+    const monthColIdx= headerRow.indexOf('month');
+
+    // "latest" probe: return just the max date (Log) or month (Finance).
+    // Reads only the key column, not the whole sheet — very fast.
+    if (latest) {
+      const keyIdx = dateColIdx >= 0 ? dateColIdx : monthColIdx;
+      if (keyIdx < 0) return jsonResponse_({ ok: true, latest: '' });
+      const keyVals = sheet.getRange(2, keyIdx + 1, lastRow - 1, 1).getValues();
+      let maxKey = '';
+      for (let i = 0; i < keyVals.length; i++) {
+        let v = keyVals[i][0];
+        if (v instanceof Date) v = normalizeDateStr_(v);
+        v = String(v || '');
+        if (v > maxKey) maxKey = v;
+      }
+      return jsonResponse_({ ok: true, latest: maxKey });
+    }
+
+    // If since is provided, find the first row to read using binary search
+    // This avoids loading the entire sheet into memory
+    let startRow = 2;
+    if (since && (dateColIdx >= 0 || monthColIdx >= 0)) {
+      const keyColIdx = dateColIdx >= 0 ? dateColIdx : monthColIdx;
+      // Binary search for first row where key > since
+      let lo = 2, hi = lastRow;
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        let v = sheet.getRange(mid, keyColIdx + 1).getValue();
+        if (v instanceof Date) v = normalizeDateStr_(v);
+        v = String(v || '');
+        if (v <= since) lo = mid + 1;
+        else hi = mid;
+      }
+      startRow = lo;
+    }
+
+    // Only read the rows we actually need
+    if (startRow > lastRow) return jsonResponse_({ ok: true, rows: [] });
+
+    const dataRows = sheet.getRange(startRow, 1, lastRow - startRow + 1, lastCol).getValues();
 
     const rows = dataRows.map(r => {
       const obj = {};
@@ -82,11 +124,9 @@ function doGet(e) {
       return obj;
     }).filter(obj => {
       if (!since) return true;
-      // Log tab: filter by date
-      if (dateColIdx >= 0 && obj.date) return String(obj.date) > since;
-      // Finance tab: filter by month (format "YYYY-MM")
+      if (dateColIdx  >= 0 && obj.date)  return String(obj.date)  > since;
       if (monthColIdx >= 0 && obj.month) return String(obj.month) > since;
-      return true; // keep rows with no date/month (e.g. header seeds)
+      return true;
     });
 
     return jsonResponse_({ ok: true, rows });
