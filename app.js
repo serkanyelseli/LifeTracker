@@ -2198,7 +2198,12 @@ function importFinCsvText(text) {
   document.getElementById('finImportInfo').textContent =
     `✓ Imported ${entries.length} finance rows. Total stored: ${all.length}.`;
   toast(`Imported ${entries.length} finance rows`, 'ok');
+  // Rebuild the finance dashboard selectors so the new years appear immediately,
+  // then re-render everything. Without ensureFinDashSelectors the year dropdown
+  // can keep a stale value and the KPIs render blank.
+  ensureFinDashSelectors();
   renderAll();
+  renderFinDashboard();
 }
 
 const EXPORT_COLS = ['type','label','date','year','month','day','prayTotal',
