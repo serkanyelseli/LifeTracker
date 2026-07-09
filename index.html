@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V4.0 · build 17</span>
+    <span class="version-badge">V4.0 · build 18</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -430,10 +430,16 @@
         <button class="btn btn-secondary" id="exportCsv">Export Log backup CSV</button>
         <button class="btn btn-secondary" id="exportFinCsv">Export Finance backup CSV</button>
         <button class="btn btn-secondary" id="exportJson">Export full JSON backup</button>
+        <button class="btn btn-sheets" id="importJsonBtn">↓ Restore from JSON backup</button>
+        <input type="file" id="jsonFile" accept=".json,application/json" style="display:none" />
         <button class="btn btn-danger" id="clearAll">Clear all app data</button>
         <button class="btn btn-secondary" id="clearDaily">Clear daily log only</button>
         <button class="btn btn-secondary" id="clearFinance">Clear finance only</button>
       </div>
+      <p id="jsonImportInfo" style="font-size:12px;color:var(--muted);margin-top:10px"></p>
+      <p style="font-size:12px;color:var(--muted);margin-top:6px">
+        JSON backup carries daily log, finance <em>and</em> calendar events — the only export that includes calendar. Restore merges: same date/month/id is overwritten, everything else kept.
+      </p>
       <p style="font-size:12px;color:var(--muted);margin-top:12px">
         Header row: Wk, Date, Day, Month, Year · Sub-header: S/Ö/İk/Ak/Y/Nf/T and Read, TvS, Mov, Tth, WO, Sleep, Wg/KG, Tgt, Delta/∆kg, Wat, Ger, Nut, B/M · Score, New Score. Monthly (AVG08_01) and yearly (AVG08) rows supported.
       </p>
@@ -723,6 +729,6 @@
   </section>
 
 </main>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

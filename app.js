@@ -2241,11 +2241,83 @@ function exportFinCsv() {
   toast('Finance CSV exported','ok');
 }
 function exportJson() {
-  const data = getData();
+  const data    = getData();
   const finData = getFinData();
-  if (!data.length && !finData.length) return toast('No data to export','err');
-  download(new Blob([JSON.stringify({log:data, finance:finData},null,2)],{type:'application/json'}), `serkan-lt-v3-${todayISO()}.json`);
+  const calData = getCalEvents();
+  if (!data.length && !finData.length && !calData.length) return toast('No data to export','err');
+  const payload = {
+    version: 4,
+    exportedAt: new Date().toISOString(),
+    log: data,
+    finance: finData,
+    calendar: calData,
+  };
+  download(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}), `serkan-lt-v4-${todayISO()}.json`);
   toast('JSON exported','ok');
+}
+
+/* Restore from a full JSON backup. Merges rather than replaces, matching how
+   the CSV importers behave: existing rows with the same key are overwritten,
+   everything else is kept. Accepts older {log, finance} files with no calendar. */
+function importJsonText(text) {
+  const info = document.getElementById('jsonImportInfo');
+  const say  = m => { if (info) info.textContent = m; };
+
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch (e) { say('Import failed: not valid JSON.'); toast('Invalid JSON file','err'); return; }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    say('Import failed: unexpected file shape.'); toast('Unexpected JSON shape','err'); return;
+  }
+
+  const log = Array.isArray(payload.log)      ? payload.log      : [];
+  const fin = Array.isArray(payload.finance)  ? payload.finance  : [];
+  const cal = Array.isArray(payload.calendar) ? payload.calendar : [];
+
+  if (!log.length && !fin.length && !cal.length) {
+    say('Import failed: file contains no log, finance or calendar rows.');
+    toast('Nothing to import','err'); return;
+  }
+
+  const parts = [];
+  if (log.length) parts.push(`${log.length} daily`);
+  if (fin.length) parts.push(`${fin.length} finance`);
+  if (cal.length) parts.push(`${cal.length} calendar`);
+  if (!confirm(`Restore ${parts.join(' · ')} row(s)?\n\nExisting rows with the same date/month/id will be overwritten. Everything else is kept.`)) {
+    say('Import cancelled.'); return;
+  }
+
+  let added = { log:0, fin:0, cal:0 };
+
+  if (log.length) {
+    const key = e => `${e.type}|${e.date}|${e.label||''}`;
+    const by = new Map();
+    getData().forEach(e => by.set(key(e), e));
+    log.forEach(e => { if (e && e.date) { by.set(key(e), e); added.log++; } });
+    setData([...by.values()].sort((a,b) => String(a.date+a.type).localeCompare(String(b.date+b.type))));
+  }
+
+  if (fin.length) {
+    const key = e => `${e.type}|${e.month}`;
+    const by = new Map();
+    getFinData().forEach(e => by.set(key(e), e));
+    fin.forEach(e => { if (e && e.month) { by.set(key(e), e); added.fin++; } });
+    setFinData([...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month))));
+  }
+
+  if (cal.length) {
+    const by = new Map();
+    getCalEvents().forEach(e => by.set(e.id, e));
+    cal.forEach(e => { if (e && e.id) { by.set(e.id, e); added.cal++; } });
+    setCalEvents([...by.values()]);
+  }
+
+  say(`✓ Restored ${added.log} daily · ${added.fin} finance · ${added.cal} calendar rows.`);
+  toast('Backup restored','ok');
+  ensureYearSelectors();
+  ensureFinDashSelectors();
+  renderAll();
 }
 function download(blob, name) {
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
@@ -2660,6 +2732,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('exportCsv').addEventListener('click', exportCsv);
   document.getElementById('exportFinCsv').addEventListener('click', exportFinCsv);
   document.getElementById('exportJson').addEventListener('click', exportJson);
+  const jsonFile = document.getElementById('jsonFile');
+  document.getElementById('importJsonBtn').addEventListener('click', () => jsonFile.click());
+  jsonFile.addEventListener('change', () => {
+    const f = jsonFile.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => importJsonText(e.target.result);
+    r.readAsText(f, 'UTF-8');
+    jsonFile.value = ''; // allow re-picking the same file
+  });
   document.getElementById('clearAll').addEventListener('click', () => {
     if (!confirm('Clear ALL app data from this browser (Log + Finance)?')) return;
     localStorage.removeItem(STORAGE_KEY);
