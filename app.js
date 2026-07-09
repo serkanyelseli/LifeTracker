@@ -134,6 +134,37 @@ function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete chart
 function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; } }
 function setData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
+/* ── Quota-safe writes ───────────────────────────────────────────
+   Safari counts localStorage in UTF-16 (2 bytes per character) against a
+   ~5 MB quota, so a dataset that measures 2.5 MB as text costs 5 MB here.
+   Chrome allows ~10 MB and never complains. When a write overflows, the
+   `highlights` (notes) field is by far the largest payload and the one no
+   dashboard, chart, record or streak reads — so we drop it and retry
+   rather than failing the whole import. */
+function isQuotaError(e) {
+  if (!e) return false;
+  return e.name === 'QuotaExceededError'
+      || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      || e.code === 22 || e.code === 1014;
+}
+
+/* Write the daily log. Returns {ok, notesDropped}. Throws only if even the
+   notes-free payload will not fit. */
+function setLogSafe(rows) {
+  try {
+    setData(rows);
+    return { ok: true, notesDropped: false };
+  } catch (e) {
+    if (!isQuotaError(e)) throw e;
+    const stripped = rows.map(r => {
+      if (r && r.highlights) { const c = {...r}; delete c.highlights; return c; }
+      return r;
+    });
+    setData(stripped); // if this throws, it genuinely does not fit — let it bubble
+    return { ok: true, notesDropped: true };
+  }
+}
+
 const FIN_STORAGE_KEY = 'serkanLifeTrackerV3_finance';
 function getFinData() { try { return JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]'); } catch(e) { return []; } }
 function setFinData(d) { localStorage.setItem(FIN_STORAGE_KEY, JSON.stringify(d)); }
@@ -2160,12 +2191,26 @@ function importCsvText(text) {
   getData().forEach(e=>by.set(key(e),e));
   entries.forEach(e=>by.set(key(e),e));
   const all = [...by.values()].sort((a,b)=>(a.date+a.type).localeCompare(b.date+b.type));
-  setData(all);
+  let notesDropped = false;
+  try {
+    notesDropped = setLogSafe(all).notesDropped;
+  } catch (e) {
+    if (isQuotaError(e)) {
+      document.getElementById('importInfo').textContent =
+        `✗ Out of storage. ${all.length} rows do not fit in this browser, even without notes. Nothing was changed. Clear the daily log first, or import fewer years.`;
+      toast('Storage full — import aborted','err');
+    } else {
+      document.getElementById('importInfo').textContent = 'Import failed: ' + e.message;
+      toast('Import failed','err');
+    }
+    return;
+  }
   const d=entries.filter(e=>e.type==='daily').length;
   const mo=entries.filter(e=>e.type==='monthly').length;
   const yr=entries.filter(e=>e.type==='yearly').length;
   document.getElementById('importInfo').textContent =
-    `✓ Imported ${entries.length} rows: ${d} daily · ${mo} monthly · ${yr} yearly. Total stored: ${all.length}.`;
+    `✓ Imported ${entries.length} rows: ${d} daily · ${mo} monthly · ${yr} yearly. Total stored: ${all.length}.`
+    + (notesDropped ? ' · notes omitted (browser storage limit)' : '');
   toast(`Imported ${entries.length} rows`,'ok');
   renderAll();
 }
@@ -2289,13 +2334,16 @@ function importJsonText(text) {
   }
 
   let added = { log:0, fin:0, cal:0 };
+  let notesDropped = false;
 
-  if (log.length) {
-    const key = e => `${e.type}|${e.date}|${e.label||''}`;
+  // Write the SMALL stores first. If the log later overflows Safari's quota,
+  // calendar and finance are already safely persisted.
+  if (cal.length) {
     const by = new Map();
-    getData().forEach(e => by.set(key(e), e));
-    log.forEach(e => { if (e && e.date) { by.set(key(e), e); added.log++; } });
-    setData([...by.values()].sort((a,b) => String(a.date+a.type).localeCompare(String(b.date+b.type))));
+    getCalEvents().forEach(e => by.set(e.id, e));
+    cal.forEach(e => { if (e && e.id) { by.set(e.id, e); added.cal++; } });
+    try { setCalEvents([...by.values()]); }
+    catch (e) { say('Import failed writing calendar: ' + e.message); toast('Calendar write failed','err'); return; }
   }
 
   if (fin.length) {
@@ -2303,18 +2351,37 @@ function importJsonText(text) {
     const by = new Map();
     getFinData().forEach(e => by.set(key(e), e));
     fin.forEach(e => { if (e && e.month) { by.set(key(e), e); added.fin++; } });
-    setFinData([...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month))));
+    try { setFinData([...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month)))); }
+    catch (e) { say('Import failed writing finance: ' + e.message); toast('Finance write failed','err'); return; }
   }
 
-  if (cal.length) {
+  if (log.length) {
+    const key = e => `${e.type}|${e.date}|${e.label||''}`;
     const by = new Map();
-    getCalEvents().forEach(e => by.set(e.id, e));
-    cal.forEach(e => { if (e && e.id) { by.set(e.id, e); added.cal++; } });
-    setCalEvents([...by.values()]);
+    getData().forEach(e => by.set(key(e), e));
+    log.forEach(e => { if (e && e.date) { by.set(key(e), e); added.log++; } });
+    const merged = [...by.values()].sort((a,b) => String(a.date+a.type).localeCompare(String(b.date+b.type)));
+    try {
+      const res = setLogSafe(merged);
+      notesDropped = res.notesDropped;
+    } catch (e) {
+      if (isQuotaError(e)) {
+        say(`✗ Out of storage. Calendar (${added.cal}) and finance (${added.fin}) were restored, but ${merged.length} daily rows do not fit in this browser — even without notes. Clear the daily log first, or import fewer years.`);
+        toast('Storage full — daily log not restored','err');
+      } else {
+        say('Import failed: ' + e.message);
+        toast('Restore failed','err');
+      }
+      renderAll();
+      return;
+    }
   }
 
-  say(`✓ Restored ${added.log} daily · ${added.fin} finance · ${added.cal} calendar rows.`);
-  toast('Backup restored','ok');
+  const noteMsg = notesDropped
+    ? ' · notes omitted (browser storage limit — dashboards, records, streaks and patterns are unaffected)'
+    : '';
+  say(`✓ Restored ${added.log} daily · ${added.fin} finance · ${added.cal} calendar rows.${noteMsg}`);
+  toast(notesDropped ? 'Restored without notes' : 'Backup restored', 'ok');
   ensureYearSelectors();
   ensureFinDashSelectors();
   renderAll();
@@ -2401,14 +2468,22 @@ async function pullFromSheets(fullPull = false) {
     getData().forEach(e => by.set(key(e), e));
     rows.forEach(e => { if (e.date) by.set(key(e), e); });
     const all = [...by.values()].sort((a,b) => (a.date+a.type).localeCompare(b.date+b.type));
-    setData(all);
+    const res = setLogSafe(all);
     const msg = !fullPull && latestLocal
       ? `✓ Pulled ${rows.length} new rows since ${latestLocal}. Total: ${all.length}.`
       : `✓ Pulled ${rows.length} rows. Total: ${all.length}.`;
-    log.textContent = msg;
+    log.textContent = msg + (res.notesDropped ? ' · notes omitted (browser storage limit)' : '');
     toast(`Pulled ${rows.length} rows`, 'ok');
     renderAll();
-  } catch (e) { log.textContent = 'Parse error: ' + e.message; toast('Could not parse response', 'err'); }
+  } catch (e) {
+    if (isQuotaError(e)) {
+      log.textContent = `✗ Out of browser storage. The pulled rows do not fit, even without notes. Nothing was changed. Clear the daily log and re-import, or use a device with more storage.`;
+      toast('Storage full — pull aborted', 'err');
+    } else {
+      log.textContent = 'Parse error: ' + e.message;
+      toast('Could not parse response', 'err');
+    }
+  }
 }
 
 async function pushAllToSheets() {
