@@ -20,7 +20,8 @@ const LOG_HEADERS = ['type','label','date','year','month','day','prayTotal',
 const FIN_HEADERS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
   'expHousehold','expSeko','expCiko','expYaz','expPotisko','expTransport','expGrocery','expEatOut','expOthers',
   'trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious',
-  'trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious','notes'];
+  'trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious',
+  'trMomTl','trOthersTl','holdingEur','holdingTry','eurTryRate','notes'];
 
 function getTabConfig_(tabName) {
   if (tabName === FIN_TAB_NAME) return { name: FIN_TAB_NAME, headers: FIN_HEADERS, keyField: 'month' };

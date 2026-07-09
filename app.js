@@ -147,9 +147,20 @@ function parseNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 function num0(v) { return parseNum(v) ?? 0; }
+/* Round half away from zero, deterministically.
+   Intl.NumberFormat's own rounding differs between V8 (Chrome) and
+   JavaScriptCore (Safari) at .x5 boundaries — e.g. 3.35 formats as
+   "3,4" in Chrome but "3,3" in Safari. Rounding here first means Intl
+   only ever formats an already-rounded value, so every engine agrees. */
+function roundHalfExpand(n, d) {
+  const f = Math.pow(10, d);
+  const s = n < 0 ? -1 : 1;
+  return s * Math.round(Math.abs(n) * f) / f;
+}
 function fmt(n, d=1) {
   if (n === null || n === undefined || !Number.isFinite(Number(n))) return '—';
-  return Number(n).toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
+  const r = roundHalfExpand(Number(n), d);
+  return r.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
 }
 function todayISO() { return new Date().toISOString().slice(0,10); }
 
