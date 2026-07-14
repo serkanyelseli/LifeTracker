@@ -1963,11 +1963,11 @@ function renderFinDashCharts() {
   // delta exists. The panel collapses so the layout stays clean.
   destroyChart('finDashSalary');
   const hasAllowance = allowanceSeries.some(v => v != null && v > 0);
-  const salaryPanel = document.getElementById('finDashSalaryChart')?.closest('.panel');
+  const salaryRow = document.getElementById('finDashSalaryRow');
   if (!hasAllowance) {
-    if (salaryPanel) salaryPanel.style.display = 'none';
+    if (salaryRow) salaryRow.style.display = 'none';
   } else {
-    if (salaryPanel) salaryPanel.style.display = '';
+    if (salaryRow) salaryRow.style.display = '';
     document.getElementById('finDashSalaryTitle').textContent =
       view === 'yearly' ? 'Salary vs Total Income (k€) — allowance delta, all years'
                         : `Salary vs Total Income (k€) — allowance delta, ${y}`;
