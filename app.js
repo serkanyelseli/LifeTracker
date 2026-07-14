@@ -23,7 +23,7 @@ const PRAYER_PARTS = ['prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT'
 
 /* ── Finance entry — monthly, separate from daily Log ── */
 const FIN_SHEET_TAB = 'Finance';
-const EXP_DE_PARTS = ['expHousehold','expSeko','expCiko','expYaz','expPotisko','expTransport','expGrocery','expEatOut','expOthers'];
+const EXP_DE_PARTS = ['expHousehold','expFamily','expPotisko','expTransport','expGrocery','expEatOut','expOthers'];
 const TR_MOM_PARTS = ['trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious'];
 const TR_OTHERS_PARTS = ['trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious'];
 const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields, both clusters
@@ -1700,10 +1700,10 @@ function ensureFinDashSelectors() {
 }
 
 const DE_CAT_LABELS = {
-  expHousehold:'Household', expSeko:'Seko', expCiko:'Çiko', expYaz:'Yaz', expPotisko:'Potişko',
+  expHousehold:'Household', expFamily:'Family', expPotisko:'Potişko',
   expTransport:'Transport', expGrocery:'Grocery', expEatOut:'Eat Out', expOthers:'Others'
 };
-const DE_CAT_COLORS = ['#0ea5e9','#f59e0b','#22c55e','#a78bfa','#ef4444','#14b8a6','#fb923c','#ec4899','#94a3b8'];
+const DE_CAT_COLORS = ['#0ea5e9','#22c55e','#ef4444','#14b8a6','#fb923c','#ec4899','#94a3b8'];
 
 function renderFinDashKpis() {
   const y  = document.getElementById('finDashYearSelect').value;

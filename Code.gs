@@ -18,7 +18,7 @@ const LOG_HEADERS = ['type','label','date','year','month','day','prayTotal',
   'nutrition','bonusMalus','newScore','highlights'];
 
 const FIN_HEADERS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
-  'expHousehold','expSeko','expCiko','expYaz','expPotisko','expTransport','expGrocery','expEatOut','expOthers',
+  'expHousehold','expFamily','expPotisko','expTransport','expGrocery','expEatOut','expOthers',
   'trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious',
   'trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious',
   'trMomTl','trOthersTl','holdingEur','holdingTry','eurTryRate','notes'];
