@@ -1251,7 +1251,7 @@ const PALETTE = [C.blue, C.yellow, C.green, C.purple];
 function valueLabel(decimals=1) {
   return {
     color:'#cdd7ea', font:{size:10,weight:'500',family:'JetBrains Mono'},
-    formatter: v => (v===null||v===undefined||!Number.isFinite(Number(v))) ? '' : Number(v).toFixed(decimals),
+    formatter: v => (v===null||v===undefined||!Number.isFinite(Number(v))) ? '' : fmt(v, decimals),
   };
 }
 
@@ -1269,7 +1269,7 @@ function chartDefaults(labels, datasets, opts={}) {
         tooltip: {
           backgroundColor:'#1a2236', borderColor:'rgba(255,255,255,0.1)', borderWidth:1,
           titleColor:'#e8edf5', bodyColor:'#7a8ba8',
-          callbacks:{ label: ctx=>' '+ctx.dataset.label+': '+(ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—') }
+          callbacks:{ label: ctx=>' '+ctx.dataset.label+': '+(ctx.parsed.y!=null?fmt(ctx.parsed.y,1):'—') }
         },
         datalabels: {
           ...valueLabel(opts.decimals ?? 1),
@@ -1887,8 +1887,8 @@ function renderFinDashCharts() {
     plugins:{
       legend:{labels:{color:'#7a8ba8',font:{size:12,family:'Inter'},boxWidth:18}},
       tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-        callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2):'—'}`}},
-      datalabels:{ ...valueLabel(2), align:'top', anchor:'end', offset:2,
+        callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?fmt(ctx.parsed.y,1):'—'}`}},
+      datalabels:{ ...valueLabel(1), align:'top', anchor:'end', offset:2,
         display: ctx => ctx.dataset.data[ctx.dataIndex] !== null }
     },
     scales:{
@@ -1999,7 +1999,7 @@ function renderFinDashCharts() {
               const v = ctx.parsed.y;
               const partial = netIncomplete[ctx.dataIndex];
               if (v==null) return ' No data';
-              return partial ? ` Net: ${v.toFixed(2)} k€ (partial — missing income or TR for this period)` : ` Net: ${v.toFixed(2)} k€`;
+              return partial ? ` Net: ${fmt(v,1)} k€ (partial — missing income or TR for this period)` : ` Net: ${fmt(v,1)} k€`;
             }
           }
         }
@@ -2071,8 +2071,8 @@ function renderFinDashCharts() {
         legend:{display:false},
         tooltip:{backgroundColor:'#1a2236',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
           titleColor:'#e8edf5',bodyColor:'#7a8ba8',
-          callbacks:{label:ctx=>` Cumulative: ${ctx.parsed.y.toFixed(2)} k€`}},
-        datalabels:{...valueLabel(2),align:'top',anchor:'end',offset:4,
+          callbacks:{label:ctx=>` Cumulative: ${fmt(ctx.parsed.y,0)} k€`}},
+        datalabels:{...valueLabel(0),align:'top',anchor:'end',offset:4,
           display:ctx=>ctx.dataIndex===cumulSeries.length-1||ctx.dataIndex===0}
       },
       scales:{
