@@ -1765,10 +1765,14 @@ function renderFinDashKpis() {
     </div>`;
   }
 
-  // Render KPIs first without the FX card, then update when rate arrives
+  // Render KPIs first without the FX card, then update when rate arrives.
+  // Allowance card only appears when this year (or its comparison) has allowance —
+  // it stopped after 2016, so for recent years an empty "—" card is just noise.
+  const showAllowance = (a && a.allowanceIncome != null && a.allowanceIncome > 0)
+                     || (b && b.allowanceIncome != null && b.allowanceIncome > 0);
   const kpiBase =
     finCard('Income',           a.income,          b?.income,          'k€', false) +
-    finCard('Allowance Income', a.allowanceIncome,  b?.allowanceIncome, 'k€', false) +
+    (showAllowance ? finCard('Allowance Income', a.allowanceIncome, b?.allowanceIncome, 'k€', false) : '') +
     finCard('Expenses DE',      a.expDE,            b?.expDE,           'k€', true)  +
     finCard('TR Payments',      a.tr,               b?.tr,              'k€', true)  +
     finCard('Net Cashflow',     netA,               netB,               'k€', false, 2, partialA) +
@@ -1953,18 +1957,29 @@ function renderFinDashCharts() {
   });
 
   // ── Chart 1b: Salary vs Total Income — shows allowance delta visually ──
+  // Allowance stopped entirely after 2016. When the range on screen has no
+  // allowance, salary === total income, so this chart would show two identical
+  // bars. In that case we hide it: the delta chart only earns its place when a
+  // delta exists. The panel collapses so the layout stays clean.
   destroyChart('finDashSalary');
-  document.getElementById('finDashSalaryTitle').textContent =
-    view === 'yearly' ? 'Salary vs Total Income (k€) — allowance delta, all years'
-                      : `Salary vs Total Income (k€) — allowance delta, ${y}`;
-  charts['finDashSalary'] = new Chart(document.getElementById('finDashSalaryChart'), {
-    type:'bar',
-    data:{ labels, datasets:[
-      { ...barSeries('Salary only k€',  incomeSeries,       C.green) },
-      { ...barSeries('Total Income k€', totalIncomeSeries,  C.teal)  },
-    ]},
-    options: barOptions
-  });
+  const hasAllowance = allowanceSeries.some(v => v != null && v > 0);
+  const salaryPanel = document.getElementById('finDashSalaryChart')?.closest('.panel');
+  if (!hasAllowance) {
+    if (salaryPanel) salaryPanel.style.display = 'none';
+  } else {
+    if (salaryPanel) salaryPanel.style.display = '';
+    document.getElementById('finDashSalaryTitle').textContent =
+      view === 'yearly' ? 'Salary vs Total Income (k€) — allowance delta, all years'
+                        : `Salary vs Total Income (k€) — allowance delta, ${y}`;
+    charts['finDashSalary'] = new Chart(document.getElementById('finDashSalaryChart'), {
+      type:'bar',
+      data:{ labels, datasets:[
+        { ...barSeries('Salary only k€',  incomeSeries,       C.green) },
+        { ...barSeries('Total Income k€', totalIncomeSeries,  C.teal)  },
+      ]},
+      options: barOptions
+    });
+  }
 
   // ── Chart 2: Net cashflow ──
   // Treat a missing component as 0 rather than requiring Income+ExpDE+TR to
