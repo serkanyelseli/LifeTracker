@@ -193,6 +193,18 @@ function fmt(n, d=1) {
   const r = roundHalfExpand(Number(n), d);
   return r.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
 }
+
+/* Returns a Chart.js y-axis tick callback with consistent German number
+   formatting. `decimals` sets precision — use 0 for large-magnitude charts
+   (worth, cumulative, in the tens–hundreds of k€) and 1 for everything else.
+   Uses roundHalfExpand so Chrome and Safari render identical tick labels. */
+function axisTickFmt(decimals=1) {
+  return function(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return '';
+    const r = roundHalfExpand(Number(value), decimals);
+    return r.toLocaleString('de-DE', {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+  };
+}
 function todayISO() { return new Date().toISOString().slice(0,10); }
 
 function toast(msg, type='info', ms=3000) {
@@ -1094,7 +1106,7 @@ function renderPatternChart(metric, rows) {
         },
         y:{
           grid:{color:'rgba(255,255,255,0.04)'},
-          ticks:{color:'#7a8ba8',font:{size:10}},
+          ticks:{color:'#7a8ba8',font:{size:10},callback:axisTickFmt(1)},
           beginAtZero:false,
         }
       }
@@ -1267,7 +1279,8 @@ function chartDefaults(labels, datasets, opts={}) {
       },
       scales: {
         x: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#7a8ba8',font:{size:11},maxRotation:0} },
-        y: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#7a8ba8',font:{size:11}} }
+        y: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#7a8ba8',font:{size:11},
+             callback: axisTickFmt(opts.axisDecimals ?? 1) } }
       }
     }
   };
@@ -1880,7 +1893,7 @@ function renderFinDashCharts() {
     },
     scales:{
       x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}}}
+      y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11},callback:axisTickFmt(1)}}
     }
   };
 
@@ -2064,7 +2077,7 @@ function renderFinDashCharts() {
       },
       scales:{
         x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11},callback:axisTickFmt(0)},
           title:{display:true,text:'k€',color:'#7a8ba8',font:{size:11}}}
       }
     }
@@ -2108,7 +2121,7 @@ function renderFinDashCharts() {
       },
       scales:{
         x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:10}}},
-        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7a8ba8',font:{size:11},callback:axisTickFmt(0)},
           title:{display:true,text:'k€',color:'#7a8ba8',font:{size:11}}}
       }
     };
