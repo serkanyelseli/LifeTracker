@@ -305,6 +305,7 @@ function buildMap(rows) {
     movies:   idxOf(sub,['Mov']),   teeth:   idxOf(sub,['Tth']),
     workout:  idxOf(sub,['WO']),    sleep:   sleepIdx,
     weightKg: wgIdx, targetKg: tgtIdx, deltaKg: delIdx,
+    fatPct:   idxOf(sub,['Fat','Fat%','FatRate','Fat %']),
     water:    idxOf(sub,['Wat']),   german:  idxOf(sub,['Ger']),
     nutrition:idxOf(sub,['Nut']),   bonusMalus: idxOf(sub,['B/M']),
   };
@@ -327,7 +328,8 @@ function rowToEntry(row, m) {
     movies:    parseNum(g(row,m.movies)),   teeth:     parseNum(g(row,m.teeth)),
     workout:   parseNum(g(row,m.workout)),  sleep:     parseNum(g(row,m.sleep)),
     weightKg:  parseNum(g(row,m.weightKg)), targetKg:  parseNum(g(row,m.targetKg)),
-    deltaKg:   parseNum(g(row,m.deltaKg)),  water:     parseNum(g(row,m.water)),
+    deltaKg:   parseNum(g(row,m.deltaKg)),  fatPct:    parseNum(g(row,m.fatPct)),
+    water:     parseNum(g(row,m.water)),
     german:    parseNum(g(row,m.german)),   nutrition: parseNum(g(row,m.nutrition)),
     bonusMalus:parseNum(g(row,m.bonusMalus)),
     score:     parseNum(g(row,m.score)),    newScore:  parseNum(g(row,m.newScore)),
@@ -1591,12 +1593,124 @@ function renderNotLoggedNudge() {
   if (dashSection) dashSection.insertBefore(banner, dashSection.firstChild);
 }
 
+/* ── Body composition — fat kg vs lean kg ──────────────────────────
+   Weight alone cannot distinguish "lost 3kg of fat" from "lost 3kg of
+   muscle", which is exactly the ambiguity a flat scale reading hides.
+   fat kg = weight x fat% / 100 ; lean kg = weight - fat kg.
+   Lean is derived by subtraction rather than read from the scale's own
+   muscle% field, which is internally inconsistent with its fat%.
+
+   Fat% only exists from 2020 (when the scale arrived) and has a gap in
+   2022-23. So the whole row auto-hides for ranges with no readings —
+   same approach as the finance allowance chart, and for the same reason:
+   an empty frame is worse than no frame. */
+function bodyCompMonthly(year) {
+  const rows = getData().filter(d =>
+    d.type === 'daily' && d.fatPct != null && d.fatPct > 0 &&
+    d.weightKg != null && d.weightKg > 0 &&
+    (year === 'all' || d.year === Number(year)));
+  const buckets = {};
+  rows.forEach(d => {
+    const k = year === 'all' ? `${d.year}-${String(d.month).padStart(2,'0')}` : d.month;
+    (buckets[k] ||= []).push(d);
+  });
+  const keys = Object.keys(buckets).sort((a,b) =>
+    year === 'all' ? String(a).localeCompare(String(b)) : a - b);
+  return keys.map(k => {
+    const b = buckets[k];
+    const avg = f => b.reduce((s,d) => s + f(d), 0) / b.length;
+    const kg  = avg(d => d.weightKg);
+    const fat = avg(d => d.weightKg * d.fatPct / 100);
+    return { k, n: b.length, kg, fat, lean: kg - fat,
+             fatPct: avg(d => d.fatPct) };
+  });
+}
+
+function renderBodyComp() {
+  const row = document.getElementById('bodyCompRow');
+  if (!row) return;
+  destroyChart('bodyComp');
+
+  const y = document.getElementById('yearSelect').value;
+  const series = bodyCompMonthly(y);
+
+  // No scale readings in this range -> collapse the whole row.
+  if (series.length < 2) {
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+
+  const labels = series.map(s => y === 'all' ? s.k : MONTHS[s.k - 1]);
+  document.getElementById('bodyCompTitle').textContent =
+    `Body composition — fat vs lean (kg)${y === 'all' ? '' : ' · ' + y}`;
+
+  charts['bodyComp'] = new Chart(document.getElementById('bodyCompChart'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label:'Lean kg', data: series.map(s => round3(s.lean)),
+        backgroundColor:'#0ea5e9cc', stack:'body', borderRadius:2 },
+      { label:'Fat kg',  data: series.map(s => round3(s.fat)),
+        backgroundColor:'#f59e0bcc', stack:'body', borderRadius:2 },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{labels:{color:'#cdd7ea', font:{size:11}, boxWidth:12}},
+        datalabels:{display:false},
+        tooltip:{
+          backgroundColor:'#16203a', borderColor:'#1f2c48', borderWidth:1,
+          titleColor:'#e6edf7', bodyColor:'#cdd7ea', padding:10,
+          callbacks:{
+            label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y,1)} kg`,
+            footer: items => {
+              const s = series[items[0].dataIndex];
+              return `total ${fmt(s.kg,1)} kg · ${fmt(s.fatPct,1)}% fat · ${s.n} reading${s.n>1?'s':''}`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ stacked:true, grid:{color:'rgba(255,255,255,0.04)'},
+            ticks:{color:'#7a8ba8', font:{size:10}} },
+        y:{ stacked:true, grid:{color:'rgba(255,255,255,0.04)'},
+            ticks:{color:'#7a8ba8', font:{size:11}, callback: axisTickFmt(0)},
+            title:{display:true, text:'kg', color:'#7a8ba8', font:{size:11}} }
+      }
+    }
+  });
+
+  // Readout: what the scale weight alone cannot tell you — which way the kg went.
+  const a = series[0], b = series[series.length - 1];
+  const dFat = b.fat - a.fat, dLean = b.lean - a.lean, dKg = b.kg - a.kg;
+  const moved = Math.abs(dFat) + Math.abs(dLean);
+  const pctFat = moved ? Math.abs(dFat) / moved * 100 : 0;
+  const sign = v => (v >= 0 ? '+' : '−') + fmt(Math.abs(v), 1);
+  let verdict = '';
+  if (Math.abs(dKg) < 0.5 && Math.abs(dFat) > 0.5) {
+    verdict = ' Weight barely moved, but the composition did — this is recomposition the scale cannot show.';
+  } else if (dFat < -0.5 && dLean > -0.3) {
+    verdict = ' Fat down while lean held — the good pattern.';
+  } else if (dFat < 0 && dLean < -0.5) {
+    verdict = ' Fat down, but lean came off too — resistance work protects it.';
+  } else if (dFat > 0.5) {
+    verdict = ' Fat trending up over this range.';
+  }
+  document.getElementById('bodyCompNote').innerHTML =
+    `<b>${labels[0]} → ${labels[labels.length-1]}:</b> ` +
+    `weight ${sign(dKg)} kg · fat ${sign(dFat)} kg · lean ${sign(dLean)} kg` +
+    (moved > 0.3 ? ` · <b>${fmt(pctFat,0)}% of the change was fat</b>.` : '.') +
+    verdict;
+}
+
 function renderDashboard() {
   ensureYearSelectors();
   renderKpis();
   renderRecords();
   renderStreaks();
   renderNotLoggedNudge();
+  renderBodyComp();
 
   const metric = document.getElementById('metricSelect').value;
   const y  = document.getElementById('yearSelect').value;
