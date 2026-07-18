@@ -1136,12 +1136,20 @@ function switchView(v) {
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   document.getElementById(v).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  // The entry forms live under "More ▾" — light it up when one is showing.
+  const moreBtn = document.getElementById('navMoreBtn');
+  if (moreBtn) moreBtn.classList.toggle('active', v==='entry' || v==='finEntry');
   if (v==='dashboard') renderDashboard();
   else if (v==='finDashboard') renderFinDashboard();
-  else if (v==='history') renderHistory();
+  else if (v==='history') renderHistory();   // guide is now static HTML inside this view
   else if (v==='calendar') renderCalendar();
   else if (v==='patterns') renderPatterns();
-  // 'guide' is static HTML — no render needed
+  // 'sync' merges import + sheets, both static forms — no render needed
+  // close the More menu whenever a view changes
+  const mm = document.getElementById('navMoreMenu');
+  const mb = document.getElementById('navMoreBtn');
+  if (mm) mm.style.display = 'none';
+  if (mb) mb.setAttribute('aria-expanded','false');
 }
 
 /* ════════════════════════════════════════════
@@ -2786,9 +2794,30 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   loadSelectedFinMonth();
 
-  // Nav
+  // Nav — primary buttons carry data-view; the More toggle has none.
   document.querySelectorAll('.nav-btn').forEach(b =>
-    b.addEventListener('click', () => switchView(b.dataset.view)));
+    b.addEventListener('click', () => { if (b.dataset.view) switchView(b.dataset.view); }));
+
+  // "More ▾" dropdown holding the entry forms
+  const moreBtn  = document.getElementById('navMoreBtn');
+  const moreMenu = document.getElementById('navMoreMenu');
+  if (moreBtn && moreMenu) {
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = moreMenu.style.display !== 'none';
+      moreMenu.style.display = open ? 'none' : 'block';
+      moreBtn.setAttribute('aria-expanded', String(!open));
+    });
+    moreMenu.querySelectorAll('.nav-more-item').forEach(item =>
+      item.addEventListener('click', () => switchView(item.dataset.view)));
+    // click anywhere else closes the menu
+    document.addEventListener('click', (e) => {
+      if (!moreMenu.contains(e.target) && e.target !== moreBtn) {
+        moreMenu.style.display = 'none';
+        moreBtn.setAttribute('aria-expanded','false');
+      }
+    });
+  }
 
   // Dashboard controls
   ['yearSelect','compareYearSelect','metricSelect','monthSelect'].forEach(id => {
