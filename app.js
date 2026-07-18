@@ -1136,15 +1136,16 @@ function switchView(v) {
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   document.getElementById(v).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  // The entry forms live under "More ▾" — light it up when one is showing.
+  // These views live under "More ▾" — light it up when one is showing.
   const moreBtn = document.getElementById('navMoreBtn');
-  if (moreBtn) moreBtn.classList.toggle('active', v==='entry' || v==='finEntry');
+  const inMore = ['entry','finEntry','patterns','history','guide'];
+  if (moreBtn) moreBtn.classList.toggle('active', inMore.includes(v));
   if (v==='dashboard') renderDashboard();
   else if (v==='finDashboard') renderFinDashboard();
-  else if (v==='history') renderHistory();   // guide is now static HTML inside this view
-  else if (v==='calendar') renderCalendar();
+  else if (v==='history') renderHistory();
   else if (v==='patterns') renderPatterns();
-  // 'sync' merges import + sheets, both static forms — no render needed
+  else if (v==='calendar') renderCalendar();
+  // 'guide' and 'sync' are static — no render needed
   // close the More menu whenever a view changes
   const mm = document.getElementById('navMoreMenu');
   const mb = document.getElementById('navMoreBtn');

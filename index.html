@@ -35,15 +35,16 @@
   <nav>
     <button class="nav-btn active" data-view="dashboard">Dashboard</button>
     <button class="nav-btn" data-view="finDashboard">Finance Dashboard</button>
-    <button class="nav-btn" data-view="patterns">Patterns</button>
     <button class="nav-btn" data-view="calendar">Calendar</button>
     <button class="nav-btn" data-view="sync">Sync</button>
-    <button class="nav-btn" data-view="history">History &amp; Guide</button>
     <div class="nav-more">
       <button class="nav-btn nav-more-btn" id="navMoreBtn" aria-expanded="false">More ▾</button>
       <div class="nav-more-menu" id="navMoreMenu" style="display:none">
         <button class="nav-more-item" data-view="entry">Daily Entry</button>
         <button class="nav-more-item" data-view="finEntry">Finance Entry</button>
+        <button class="nav-more-item" data-view="patterns">Patterns</button>
+        <button class="nav-more-item" data-view="history">History</button>
+        <button class="nav-more-item" data-view="guide">Scoring Guide</button>
       </div>
     </div>
   </nav>
@@ -407,8 +408,10 @@
       </div>
       <div style="overflow-x:auto"><table id="historyTable"><thead></thead><tbody></tbody></table></div>
     </div>
-    <!-- Scoring Guide — now part of History & Guide -->
-    <div class="guide-block">
+  </section>
+
+  <!-- ── SCORING GUIDE ── -->
+  <section id="guide" class="view">
     <div class="panel">
       <div class="panel-title">Scoring Guide</div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Your personal scoring table — how each habit converts to a New Score point. Max possible per day: +11 (all Best). Reference this when logging.</p>
@@ -524,7 +527,6 @@
         </div>
 
       </div>
-    </div>
     </div>
   </section>
 
