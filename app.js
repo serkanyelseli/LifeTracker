@@ -2576,29 +2576,52 @@ async function pushNewToSheets() {
     .filter(d => d.type === 'daily' && d.date)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const toPush = sheetLatest
-    ? local.filter(d => d.date > sheetLatest)
-    : local; // if sheet empty, push everything
+  // Rows strictly newer than Sheets' latest date are appended.
+  // The latest date itself is re-sent as an UPSERT, because you often build up
+  // a single day in several sittings (morning: sleep+weight; evening: workout+
+  // reading) and push after each. Without this, the second push of the same day
+  // is skipped as "nothing new" and the afternoon's fields never reach Sheets.
+  const newer = sheetLatest ? local.filter(d => d.date > sheetLatest) : local;
+  const sameDay = sheetLatest ? local.filter(d => d.date === sheetLatest) : [];
 
-  if (!toPush.length) {
-    log.textContent = `✓ Nothing new to push. Sheets already has up to ${sheetLatest || '(empty)'}.`;
+  if (!newer.length && !sameDay.length) {
+    log.textContent = `✓ Nothing to push. Sheets already has up to ${sheetLatest || '(empty)'}.`;
     toast('Already up to date', 'ok');
     return;
   }
 
-  const CHUNK = 150;
-  const chunks = [];
-  for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
-
   let written = 0;
-  for (let i = 0; i < chunks.length; i++) {
-    log.textContent = `Pushing new batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
-    const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Log');
-    if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} new rows written.`; return; }
-    written += resp.written ?? chunks[i].length;
+
+  // 1) Upsert the current (latest) day's rows so re-pushes update in place.
+  if (sameDay.length) {
+    log.textContent = `Updating ${sheetLatest} in Sheets…`;
+    for (const entry of sameDay) {
+      const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Log');
+      if (!resp) { log.textContent = `✗ Failed updating ${sheetLatest}. ${written} rows written.`; return; }
+      written++;
+    }
   }
-  log.textContent = `✓ Pushed ${written} new rows (since ${sheetLatest || 'start'}).`;
-  toast(`Pushed ${written} new rows`, 'ok');
+
+  // 2) Append any genuinely newer days in batches.
+  const toPush = newer;
+  if (toPush.length) {
+    const CHUNK = 150;
+    const chunks = [];
+    for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
+
+    for (let i = 0; i < chunks.length; i++) {
+      log.textContent = `Pushing new batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
+      const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Log');
+      if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} rows written.`; return; }
+      written += resp.written ?? chunks[i].length;
+    }
+  }
+
+  const parts = [];
+  if (sameDay.length) parts.push(`updated ${sheetLatest}`);
+  if (toPush.length)  parts.push(`${toPush.length} new day${toPush.length>1?'s':''}`);
+  log.textContent = `✓ Pushed: ${parts.join(' + ')}.`;
+  toast(`Pushed ${written} row${written>1?'s':''}`, 'ok');
 }
 
 /* ── Finance tab push/pull (separate "Finance" sheet tab) ── */
