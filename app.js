@@ -1138,13 +1138,15 @@ function switchView(v) {
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   // These views live under "More ▾" — light it up when one is showing.
   const moreBtn = document.getElementById('navMoreBtn');
-  const inMore = ['entry','finEntry','patterns','history','guide'];
+  const inMore = ['entry','finEntry','patterns','places','countries','history','guide'];
   if (moreBtn) moreBtn.classList.toggle('active', inMore.includes(v));
   if (v==='dashboard') renderDashboard();
   else if (v==='finDashboard') renderFinDashboard();
   else if (v==='history') renderHistory();
   else if (v==='patterns') renderPatterns();
   else if (v==='calendar') renderCalendar();
+  else if (v==='places') renderPlaces();
+  else if (v==='countries') renderCountries();
   // 'guide' and 'sync' are static — no render needed
   // close the More menu whenever a view changes
   const mm = document.getElementById('navMoreMenu');
@@ -3043,4 +3045,108 @@ function renderTodayReminder() {
 
   const firstPanel = document.getElementById('entry')?.querySelector('.panel');
   if (firstPanel) firstPanel.insertBefore(banner, firstPanel.firstChild);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PLACES + COUNTRIES  (life-in-places views, added build 30)
+   Data lives here in-file (sourced from the Diary, not the daily CSV).
+   To edit: update PLACES_DATA or COUNTRY_LIST below.
+   ═══════════════════════════════════════════════════════════════ */
+const PLACES_DATA = {"phys": {"2007": {"Turkey": 332, "Italy": 33}, "2008": {"Turkey": 225, "Italy": 141}, "2009": {"Turkey": 53, "Italy": 312}, "2010": {"Turkey": 40, "Italy": 325}, "2011": {"Turkey": 211, "Italy": 147, "Other": 7}, "2012": {"Turkey": 313, "Italy": 46, "USA": 7}, "2013": {"Turkey": 201, "Italy": 158, "Germany": 6}, "2014": {"Turkey": 57, "Italy": 305, "Other": 3}, "2015": {"Turkey": 131, "Italy": 227, "Other": 7}, "2016": {"Turkey": 203, "Italy": 163}, "2017": {"Turkey": 341, "Italy": 24}, "2018": {"Turkey": 334, "Italy": 31}, "2019": {"Turkey": 312, "Other": 6, "Italy": 47}, "2020": {"Turkey": 366}, "2021": {"Turkey": 363, "Italy": 2}, "2022": {"Turkey": 346, "Italy": 13, "Other": 6}, "2023": {"Turkey": 171, "USA": 156, "Italy": 21, "Germany": 11, "Other": 5}, "2024": {"USA": 289, "Turkey": 77}, "2025": {"USA": 151, "Germany": 214}, "2026": {"Germany": 181}, "1979-2006": {"Turkey": 9943}}, "life": {"Turkey": 14019, "Italy": 1995, "Other": 34, "USA": 603, "Germany": 412}};
+const PLACES_COL = {Turkey:'#2e8b57',Italy:'#8c2f39',USA:'#4a6b9c',Germany:'#c9a227',Other:'#8b7fd6'};
+const PLACES_ORDER = ['Turkey','Italy','USA','Germany','Other'];
+
+function renderPlaces(){
+  const PHYS=PLACES_DATA.phys, LIFE=PLACES_DATA.life;
+  const yleap=y=>(y%4===0&&(y%100!==0||y%400===0))?366:365;
+  const totalDays=Object.values(LIFE).reduce((a,b)=>a+b,0);
+  const order=PLACES_ORDER.filter(c=>LIFE[c]);
+
+  // stats
+  document.getElementById('placesStats').innerHTML =
+    `<div><span style="font-size:1.7rem;font-weight:700;color:#2e8b57">${(totalDays/365.25).toFixed(0)}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">years recorded</span></div>`+
+    `<div><span style="font-size:1.7rem;font-weight:700;color:#4a6b9c">4</span><span style="color:var(--muted);font-size:12px;margin-left:5px">countries lived in</span></div>`;
+
+  // lifetime strip
+  const lb=document.getElementById('lifeBar'); lb.innerHTML='';
+  order.forEach(c=>{
+    const d=LIFE[c],pct=d/totalDays*100,yrs=(d/365.25).toFixed(1);
+    const seg=document.createElement('div');
+    seg.style.cssText=`background:${PLACES_COL[c]};width:${pct}%;display:flex;align-items:center;justify-content:center;min-width:2px`;
+    seg.innerHTML = pct>7?`<span style="font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);white-space:nowrap;padding:0 4px">${c==='Other'?'':c+' · '}${yrs}y</span>`:'';
+    seg.title=`${c}: ${yrs} years (${pct.toFixed(1)}%)`;
+    lb.appendChild(seg);
+  });
+  document.getElementById('lifeLegend').innerHTML = order.map(c=>
+    `<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:${PLACES_COL[c]};display:inline-block"></span>${c} · <b style="color:var(--text)">${(LIFE[c]/365.25).toFixed(1)}</b> yr</div>`).join('');
+
+  // per-year bars with collapsed opener
+  const COLLAPSED='1979-2006';
+  const yearKeys=Object.keys(PHYS).filter(k=>k!==COLLAPSED).map(Number).sort((a,b)=>a-b);
+  const cols=[COLLAPSED,...yearKeys.map(String)];
+  const W=1040,H=300,padL=8,padR=8,padB=22,padT=10;
+  const unit=(W-padL-padR)/(yearKeys.length+2.2);
+  const maxDays=366;
+  let s='',xcur=padL;
+  cols.forEach(key=>{
+    const rec=PHYS[key], isCol=key===COLLAPSED;
+    const slot=isCol?unit*2.2:unit;
+    const barW=isCol?slot*0.86:Math.min(slot*0.74,22);
+    const cx=xcur+slot/2;
+    const denom=isCol?(rec.Turkey||1):maxDays;
+    let acc=0;
+    PLACES_ORDER.forEach(c=>{
+      const d=rec[c]||0; if(!d) return;
+      const frac=d/denom, h=(H-padB-padT)*frac;
+      const yTop=(H-padB)-((H-padB-padT)*(acc/denom))-h;
+      s+=`<rect class="pbar" x="${cx-barW/2}" y="${yTop}" width="${barW}" height="${h}" fill="${PLACES_COL[c]}" data-k="${key}" rx="1.5"/>`;
+      acc+=d;
+    });
+    if(isCol){ s+=`<text x="${cx}" y="${H-padB+13}" text-anchor="middle" style="font-size:9px;fill:var(--muted);font-family:monospace">1979–2006</text>`; }
+    else { const y=Number(key); if(y%5===0||key===cols[cols.length-1]) s+=`<text x="${cx}" y="${H-padB+13}" text-anchor="middle" style="font-size:9px;fill:var(--muted);font-family:monospace">${y}</text>`; }
+    xcur+=slot;
+  });
+  const svg=document.getElementById('placesYearChart');
+  svg.innerHTML=s;
+  // simple title tooltips on bars
+  svg.querySelectorAll('.pbar').forEach(b=>{
+    const rec=PHYS[b.dataset.k];
+    const txt=b.dataset.k==='1979-2006'
+      ? `1979–2006 · Turkey ${(rec.Turkey/365.25).toFixed(0)} yr`
+      : `${b.dataset.k}: `+PLACES_ORDER.filter(c=>rec[c]).map(c=>`${c} ${rec[c]}d`).join(', ');
+    b.innerHTML=`<title>${txt}</title>`;
+  });
+  document.getElementById('placesFoot').textContent =
+    'First wide bar collapses 27 unbroken years in Turkey; yearly detail begins in 2007 where the Italy deployments start. Each later bar ≈ 365 days. Tap a bar for its breakdown.';
+}
+
+/* ── Countries world map ── */
+const COUNTRY_LIST = ["Turkey","Italy","Germany","USA","Greece","Czechia","Hungary","Austria","Slovenia","Croatia","France","Spain","England","Netherlands","San Marino","Monaco","Vatican","Slovakia","Liechtenstein","Luxembourg","Switzerland","Portugal","Canada","Russia","Belgium"];
+const NAME2ISO={turkey:"TR",turkiye:"TR","türkiye":"TR",italy:"IT",italia:"IT",germany:"DE",deutschland:"DE",usa:"US","united states":"US","united states of america":"US",us:"US",greece:"GR",czechia:"CZ","czech republic":"CZ",hungary:"HU",austria:"AT",slovenia:"SI",croatia:"HR",france:"FR",spain:"ES","españa":"ES",england:"GB",uk:"GB","united kingdom":"GB","great britain":"GB",britain:"GB",netherlands:"NL",holland:"NL","san marino":"SM",monaco:"MC",vatican:"VA","vatican city":"VA","holy see":"VA",slovakia:"SK",liechtenstein:"LI",luxembourg:"LU",switzerland:"CH",schweiz:"CH",suisse:"CH",portugal:"PT",canada:"CA",russia:"RU","russian federation":"RU",belgium:"BE"};
+const MICRO={SM:[1040,293],MC:[1014,295],VA:[1040,305],LI:[1024,273],LU:[1006,257]};
+const CONTINENT={TR:'Asia/Europe',RU:'Europe/Asia',US:'N.America',CA:'N.America',IT:'Europe',DE:'Europe',GR:'Europe',CZ:'Europe',HU:'Europe',AT:'Europe',SI:'Europe',HR:'Europe',FR:'Europe',ES:'Europe',GB:'Europe',NL:'Europe',SM:'Europe',MC:'Europe',VA:'Europe',SK:'Europe',LI:'Europe',LU:'Europe',CH:'Europe',PT:'Europe',BE:'Europe'};
+let _countriesRendered=false;
+function renderCountries(){
+  const isoOf=n=>NAME2ISO[n.trim().toLowerCase()]||null;
+  const isoSet=new Set(); const unmatched=[];
+  COUNTRY_LIST.forEach(n=>{const c=isoOf(n); if(c)isoSet.add(c); else unmatched.push(n);});
+  const svg=document.getElementById('worldMap');
+  // reset + paint
+  svg.querySelectorAll('path').forEach(p=>{ p.style.fill='#2a313c'; p.style.stroke='#0f1216'; p.style.strokeWidth='0.5'; });
+  isoSet.forEach(iso=>{ const p=svg.querySelector('#'+iso); if(p){p.style.fill='#2e8b57';p.style.stroke='#3fa968';p.style.strokeWidth='0.6';} });
+  const ml=document.getElementById('microLayer'); ml.innerHTML='';
+  Object.entries(MICRO).forEach(([iso,[x,y]])=>{ if(isoSet.has(iso)){
+    ml.innerHTML+=`<circle cx="${x}" cy="${y}" r="6" fill="none" stroke="#2e8b57" stroke-width="1.2" opacity="0.7"/><circle cx="${x}" cy="${y}" r="2.2" fill="#2e8b57" stroke="#fff" stroke-width="0.5"/>`;
+  }});
+  const conts=new Set(); isoSet.forEach(i=>(CONTINENT[i]||'').split('/').forEach(c=>conts.add(c)));
+  document.getElementById('countriesStats').innerHTML =
+    `<div><span style="font-size:1.7rem;font-weight:700;color:#2e8b57">${isoSet.size}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">countries</span></div>`+
+    `<div><span style="font-size:1.7rem;font-weight:700;color:#4a6b9c">${conts.size}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">continents touched</span></div>`+
+    `<div><span style="font-size:1.7rem;font-weight:700;color:#c9a227">${Math.round(isoSet.size/195*100)}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">% of ~195</span></div>`;
+  const micros=new Set(['SM','MC','VA','LI']);
+  document.getElementById('countryChips').innerHTML = COUNTRY_LIST.filter(isoOf).map(n=>{
+    const tiny=micros.has(isoOf(n));
+    return `<div style="background:var(--surface);border:1px ${tiny?'dashed':'solid'} var(--border);border-radius:999px;padding:5px 12px;font-size:13px;color:${tiny?'var(--muted)':'var(--text)'};display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#2e8b57"></span>${n}</div>`;
+  }).join('');
+  _countriesRendered=true;
 }

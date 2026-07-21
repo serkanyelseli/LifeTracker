@@ -14,8 +14,8 @@ const FIN_TAB_NAME = 'Finance';
 
 const LOG_HEADERS = ['type','label','date','year','month','day','prayTotal',
   'prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT',
-  'reading','tv','movies','teeth','workout','sleep','weightKg','targetKg','deltaKg','water','german',
-  'nutrition','bonusMalus','newScore','highlights'];
+  'reading','tv','movies','teeth','workout','sleep','weightKg','targetKg','deltaKg','fatPct','water','german',
+  'nutrition','bonusMalus','score','newScore','highlights'];
 
 const FIN_HEADERS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
   'expHousehold','expFamily','expPotisko','expTransport','expGrocery','expEatOut','expOthers',
