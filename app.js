@@ -2707,29 +2707,51 @@ async function pushNewFinToSheets() {
     .filter(d => d.month)
     .sort((a, b) => String(a.month).localeCompare(String(b.month)));
 
-  const toPush = sheetLatest
-    ? local.filter(d => String(d.month) > sheetLatest)
-    : local;
+  // Months strictly newer than Sheets' latest are appended.
+  // The latest month itself is re-sent as an UPSERT, because a month's AVG
+  // figures keep changing as you add spending through the month — without this,
+  // re-pushing the current month is skipped as "nothing new" and the updated
+  // numbers never reach Sheets. Mirrors the daily same-day fix.
+  const newer = sheetLatest ? local.filter(d => String(d.month) > sheetLatest) : local;
+  const sameMonth = sheetLatest ? local.filter(d => String(d.month) === sheetLatest) : [];
 
-  if (!toPush.length) {
-    log.textContent = `✓ Nothing new to push. Sheets has up to ${sheetLatest || '(empty)'}.`;
+  if (!newer.length && !sameMonth.length) {
+    log.textContent = `✓ Nothing to push. Sheets has up to ${sheetLatest || '(empty)'}.`;
     toast('Already up to date', 'ok');
     return;
   }
 
-  const CHUNK = 150;
-  const chunks = [];
-  for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
-
   let written = 0;
-  for (let i = 0; i < chunks.length; i++) {
-    log.textContent = `Pushing new finance batch ${i+1}/${chunks.length}…`;
-    const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Finance');
-    if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} rows written.`; return; }
-    written += resp.written ?? chunks[i].length;
+
+  // 1) Upsert the current (latest) month so re-pushes update its AVG in place.
+  if (sameMonth.length) {
+    log.textContent = `Updating ${sheetLatest} in Sheets…`;
+    for (const entry of sameMonth) {
+      const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Finance');
+      if (!resp) { log.textContent = `✗ Failed updating ${sheetLatest}. ${written} rows written.`; return; }
+      written++;
+    }
   }
-  log.textContent = `✓ Pushed ${written} new finance rows (since ${sheetLatest || 'start'}).`;
-  toast(`Pushed ${written} new finance rows`, 'ok');
+
+  // 2) Append any genuinely newer months in batches.
+  const toPush = newer;
+  if (toPush.length) {
+    const CHUNK = 150;
+    const chunks = [];
+    for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
+    for (let i = 0; i < chunks.length; i++) {
+      log.textContent = `Pushing new finance batch ${i+1}/${chunks.length}…`;
+      const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Finance');
+      if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} rows written.`; return; }
+      written += resp.written ?? chunks[i].length;
+    }
+  }
+
+  const parts = [];
+  if (sameMonth.length) parts.push(`updated ${sheetLatest}`);
+  if (toPush.length)    parts.push(`${toPush.length} new month${toPush.length>1?'s':''}`);
+  log.textContent = `✓ Pushed: ${parts.join(' + ')}.`;
+  toast(`Pushed ${written} finance row${written>1?'s':''}`, 'ok');
 }
 
 function updateSheetUI() {
