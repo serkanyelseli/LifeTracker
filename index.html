@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=52" />
+  <link rel="stylesheet" href="styles.css?v=54" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V5.0 · build 32</span>
+    <span class="version-badge">V5.0 · build 34</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -614,6 +614,7 @@
             <div class="actions" style="margin-top:8px">
               <button class="btn btn-sheets" id="pullFromSheets">↓ Pull new Log entries</button>
               <button class="btn btn-secondary" id="pullFromSheetsAll" style="font-size:12px">↓ Pull all Log</button>
+              <button class="btn btn-danger" id="pullFromSheetsReplace" style="font-size:12px">⚠ Replace all from Sheets</button>
               <button class="btn btn-sheets" id="pushNewToSheets">↑ Push new Log</button>
               <button class="btn btn-secondary" id="pushAllToSheets">↑ Push all Log data</button>
             </div>
@@ -627,6 +628,7 @@
             <div class="actions" style="margin-top:8px">
               <button class="btn btn-sheets" id="pullFinFromSheets">↓ Pull new Finance entries</button>
               <button class="btn btn-secondary" id="pullFinFromSheetsAll" style="font-size:12px">↓ Pull all Finance</button>
+              <button class="btn btn-danger" id="pullFinFromSheetsReplace" style="font-size:12px">⚠ Replace all from Sheets</button>
               <button class="btn btn-sheets" id="pushNewFinToSheets">↑ Push new Finance</button>
               <button class="btn btn-secondary" id="pushAllFinToSheets">↑ Push all Finance data</button>
             </div>
@@ -1756,6 +1758,6 @@
   <!-- ── SCORING GUIDE ── -->
 
 </main>
-<script src="app.js?v=52"></script>
+<script src="app.js?v=54"></script>
 </body>
 </html>

@@ -131,6 +131,35 @@ let charts = {};
 function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
 /* ── Storage ── */
+
+/* Shared merge key. For 'daily' rows the DATE alone is the identity — the label
+   field varies by source (in-app entry uses '', CSV import uses the date text),
+   so including it caused duplicate day rows on pull. Non-daily rows (events with
+   labels, monthly/yearly finance) keep type+key+label. */
+function mergeKey(e){
+  if (e.type === 'daily') return 'daily|' + e.date;
+  if (e.month != null && e.date == null) return e.type + '|' + String(e.month).slice(0,7);
+  return e.type + '|' + (e.date||'') + '|' + (e.label||'');
+}
+/* Count of filled data fields — used to pick the richer of two rows that share
+   a merge key, so collapsing a duplicate keeps the fuller entry regardless of order. */
+function _richness(e){
+  let n = 0;
+  for (const k in e) {
+    if (k === 'type' || k === 'label') continue;
+    const v = e[k];
+    if (v !== null && v !== undefined && v !== '') n++;
+  }
+  return n;
+}
+/* Set into a merge map, but if a row with the same key already exists, keep
+   whichever has more data (ties -> the incoming one wins, matching Sheet-authority). */
+function mergeSet(map, e){
+  const k = mergeKey(e);
+  const prev = map.get(k);
+  if (!prev || _richness(e) >= _richness(prev)) map.set(k, e);
+}
+
 function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; } }
 function setData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
@@ -2241,10 +2270,9 @@ function importCsvText(text) {
     const e = rowToEntry(rows[i], m);
     if (e) entries.push(e);
   }
-  const key = e=>`${e.type}|${e.date}|${e.label||''}`;
   const by = new Map();
-  getData().forEach(e=>by.set(key(e),e));
-  entries.forEach(e=>by.set(key(e),e));
+  getData().forEach(e=>mergeSet(by,e));   // collapse any existing dupes, keeping the richer
+  entries.forEach(e=>by.set(mergeKey(e),e)); // imported rows are authoritative
   const all = [...by.values()].sort((a,b)=>(a.date+a.type).localeCompare(b.date+b.type));
   let notesDropped = false;
   try {
@@ -2411,9 +2439,8 @@ function importJsonText(text) {
   }
 
   if (log.length) {
-    const key = e => `${e.type}|${e.date}|${e.label||''}`;
     const by = new Map();
-    getData().forEach(e => by.set(key(e), e));
+    getData().forEach(e => mergeSet(by, e));   // collapse existing dupes, keep richer
     log.forEach(e => { if (e && e.date) { by.set(key(e), e); added.log++; } });
     const merged = [...by.values()].sort((a,b) => String(a.date+a.type).localeCompare(String(b.date+b.type)));
     try {
@@ -2491,8 +2518,16 @@ async function pushEntryToSheets(entry) {
   if (resp) toast('Pushed to Sheets ✓', 'ok');
 }
 
-async function pullFromSheets(fullPull = false) {
+async function pullFromSheets(fullPull = false, replaceMode = false) {
   const log = document.getElementById('sheetsLog');
+
+  if (replaceMode) {
+    if (!confirm('REPLACE ALL daily data from Sheets?\n\nThis wipes the daily log on THIS device and rebuilds it from the Sheet. Any local rows not in the Sheet will be lost.\n\nContinue?')) {
+      log.textContent = 'Replace cancelled.';
+      return;
+    }
+    fullPull = true;
+  }
 
   // Find most recent local daily entry date
   const latestLocal = getData()
@@ -2518,15 +2553,17 @@ async function pullFromSheets(fullPull = false) {
         .forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
       return r;
     });
-    const key = e => `${e.type}|${e.date}|${e.label||''}`;
     const by = new Map();
-    getData().forEach(e => by.set(key(e), e));
-    rows.forEach(e => { if (e.date) by.set(key(e), e); });
+    // Replace mode: Sheet is sole source of truth — don't seed with local rows.
+    if (!replaceMode) getData().forEach(e => mergeSet(by, e));   // collapse dupes, keep richer
+    rows.forEach(e => { if (e.date) by.set(mergeKey(e), e); });  // Sheet rows authoritative
     const all = [...by.values()].sort((a,b) => (a.date+a.type).localeCompare(b.date+b.type));
     const res = setLogSafe(all);
-    const msg = !fullPull && latestLocal
-      ? `✓ Pulled ${rows.length} new rows since ${latestLocal}. Total: ${all.length}.`
-      : `✓ Pulled ${rows.length} rows. Total: ${all.length}.`;
+    const msg = replaceMode
+      ? `✓ Replaced all daily data from Sheets. Total: ${all.length}.`
+      : (!fullPull && latestLocal
+        ? `✓ Pulled ${rows.length} new rows since ${latestLocal}. Total: ${all.length}.`
+        : `✓ Pulled ${rows.length} rows. Total: ${all.length}.`);
     log.textContent = msg + (res.notesDropped ? ' · notes omitted (browser storage limit)' : '');
     toast(`Pulled ${rows.length} rows`, 'ok');
     renderAll();
@@ -2632,8 +2669,16 @@ async function pushFinEntryToSheets(entry) {
   if (resp) toast('Finance month pushed ✓', 'ok');
 }
 
-async function pullFinFromSheets(fullPull = false) {
+async function pullFinFromSheets(fullPull = false, replaceMode = false) {
   const log = document.getElementById('sheetsLog');
+
+  if (replaceMode) {
+    if (!confirm('REPLACE ALL finance data from Sheets?\n\nThis wipes the finance data on THIS device and rebuilds it from the Sheet. Any local finance rows not in the Sheet will be lost.\n\nContinue?')) {
+      log.textContent = 'Replace cancelled.';
+      return;
+    }
+    fullPull = true; // replace always pulls everything
+  }
 
   // Find most recent local finance month
   const latestLocal = getFinData()
@@ -2658,15 +2703,29 @@ async function pullFinFromSheets(fullPull = false) {
       numericFields.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
       return r;
     });
-    const key = e => `${e.type}|${e.month}`;
+    // normalize month to YYYY-MM: Sheets may return "2026-07" as a Date object
+    // (July 1), which would otherwise key differently from the local "2026-07"
+    // and create a duplicate instead of overwriting. Collapse both to YYYY-MM.
+    const normMonth = m => {
+      if (m instanceof Date) {
+        const p = n => String(n).padStart(2,'0');
+        return m.getFullYear() + '-' + p(m.getMonth()+1);
+      }
+      return String(m || '').slice(0, 7);
+    };
+    const key = e => `${e.type}|${normMonth(e.month)}`;
     const by = new Map();
-    getFinData().forEach(e => by.set(key(e), e));
+    // In replace mode we do NOT seed with local data — the Sheet is the sole
+    // source of truth, so anything not in the Sheet is intentionally dropped.
+    if (!replaceMode) getFinData().forEach(e => by.set(key(e), e));
     rows.forEach(e => { if (e.month) by.set(key(e), e); });
     const all = [...by.values()].sort((a,b) => String(a.month).localeCompare(String(b.month)));
     setFinData(all);
-    const msg = !fullPull && latestLocal
-      ? `✓ Pulled ${rows.length} new Finance rows since ${latestLocal}. Total: ${all.length}.`
-      : `✓ Pulled ${rows.length} Finance rows. Total: ${all.length}.`;
+    const msg = replaceMode
+      ? `✓ Replaced all finance data from Sheets. Total: ${all.length}.`
+      : (!fullPull && latestLocal
+        ? `✓ Pulled ${rows.length} new Finance rows since ${latestLocal}. Total: ${all.length}.`
+        : `✓ Pulled ${rows.length} Finance rows. Total: ${all.length}.`);
     log.textContent = msg;
     toast(`Pulled ${rows.length} finance rows`, 'ok');
     renderAll();
@@ -2968,10 +3027,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('pullFromSheets').addEventListener('click', () => pullFromSheets(false));
   document.getElementById('pullFromSheetsAll').addEventListener('click', () => pullFromSheets(true));
+  document.getElementById('pullFromSheetsReplace').addEventListener('click', () => pullFromSheets(true, true));
   document.getElementById('pushNewToSheets').addEventListener('click', pushNewToSheets);
   document.getElementById('pushAllToSheets').addEventListener('click', pushAllToSheets);
   document.getElementById('pullFinFromSheets').addEventListener('click', () => pullFinFromSheets(false));
   document.getElementById('pullFinFromSheetsAll').addEventListener('click', () => pullFinFromSheets(true));
+  document.getElementById('pullFinFromSheetsReplace').addEventListener('click', () => pullFinFromSheets(true, true));
   document.getElementById('pushNewFinToSheets').addEventListener('click', pushNewFinToSheets);
   document.getElementById('pushAllFinToSheets').addEventListener('click', pushAllFinToSheets);
 
