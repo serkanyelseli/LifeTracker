@@ -82,11 +82,13 @@ function doGet(e) {
       const keyIdx = dateColIdx >= 0 ? dateColIdx : monthColIdx;
       if (keyIdx < 0) return jsonResponse_({ ok: true, latest: '' });
       const keyVals = sheet.getRange(2, keyIdx + 1, lastRow - 1, 1).getValues();
+      const isMonth = (keyIdx === monthColIdx && dateColIdx < 0);
       let maxKey = '';
       for (let i = 0; i < keyVals.length; i++) {
         let v = keyVals[i][0];
         if (v instanceof Date) v = normalizeDateStr_(v);
         v = String(v || '');
+        if (isMonth) v = v.slice(0, 7); // Sheets may store "2026-07" as a date -> collapse to YYYY-MM
         if (v > maxKey) maxKey = v;
       }
       return jsonResponse_({ ok: true, latest: maxKey });
@@ -188,9 +190,19 @@ function doPost(e) {
         const typeIdx = cols.indexOf('type');
         const keyIdx = cols.indexOf(keyField);
         const labelIdx = cols.indexOf('label'); // only present on Log tab
-        const targetKey = keyField === 'date' ? normalizeDateStr_(body.entry[keyField]) : String(body.entry[keyField] || '');
+        // normalizeKey handles both fields: dates -> YYYY-MM-DD, and the 'month'
+        // field too — because Sheets auto-converts "2026-07" into a Date (July 1),
+        // so a stored month cell may come back as a Date object. Collapsing both
+        // sides to a YYYY-MM prefix makes the comparison reliable and stops the
+        // upsert from failing-to-match and appending a duplicate month row.
+        const normalizeKey = (val) => {
+          let s = (val instanceof Date) ? normalizeDateStr_(val) : String(val || '').trim();
+          if (keyField === 'month') s = s.slice(0, 7); // YYYY-MM
+          return s;
+        };
+        const targetKey = normalizeKey(body.entry[keyField]);
         for (let i = 0; i < dataRows.length; i++) {
-          const rowKey = keyField === 'date' ? normalizeDateStr_(dataRows[i][keyIdx]) : String(dataRows[i][keyIdx] || '');
+          const rowKey = normalizeKey(dataRows[i][keyIdx]);
           const labelMatch = labelIdx < 0 || String(dataRows[i][labelIdx] || '') === String(body.entry.label || '');
           if (String(dataRows[i][typeIdx]) === String(body.entry.type) && rowKey === targetKey && labelMatch) {
             sheet.getRange(i + 2, 1, 1, cols.length).setValues([row]);
