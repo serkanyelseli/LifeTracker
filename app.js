@@ -143,6 +143,9 @@ function mergeKey(e){
 }
 /* Count of filled data fields — used to pick the richer of two rows that share
    a merge key, so collapsing a duplicate keeps the fuller entry regardless of order. */
+/* Count of filled data fields — used only when two rows collide on the same
+   merge key, so we can keep the fuller entry. In normal loads there are no
+   collisions, so this is never called (mergeSet short-circuits on `!prev`). */
 function _richness(e){
   let n = 0;
   for (const k in e) {
@@ -152,8 +155,9 @@ function _richness(e){
   }
   return n;
 }
-/* Set into a merge map, but if a row with the same key already exists, keep
-   whichever has more data (ties -> the incoming one wins, matching Sheet-authority). */
+/* Set into a merge map, keeping the fuller row when two share a key.
+   `!prev` short-circuits before any richness work, so the no-duplicate case
+   (essentially every row) costs nothing beyond the Map set. */
 function mergeSet(map, e){
   const k = mergeKey(e);
   const prev = map.get(k);
@@ -2514,7 +2518,7 @@ async function appsScriptCall(method, body, timeoutMs = 25000, tab = null, param
 }
 
 async function pushEntryToSheets(entry) {
-  const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Log');
+  const resp = await appsScriptCall('POST', { mode: 'append', entry }, 60000, 'Log');
   if (resp) toast('Pushed to Sheets ✓', 'ok');
 }
 
@@ -2543,7 +2547,7 @@ async function pullFromSheets(fullPull = false, replaceMode = false) {
     log.textContent = 'Pulling all log data from Sheets…';
   }
 
-  const resp = await appsScriptCall('GET', null, 25000, 'Log', params);
+  const resp = await appsScriptCall('GET', null, 60000, 'Log', params);
   if (!resp) { log.textContent = 'Pull failed.'; return; }
   try {
     const rows = (resp.rows || []).map(r => {
@@ -2591,7 +2595,7 @@ async function pushAllToSheets() {
   for (let i = 0; i < chunks.length; i++) {
     const mode = i === 0 ? 'replaceAll' : 'appendBatch';
     log.textContent = `Pushing batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
-    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 30000, 'Log');
+    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 60000, 'Log');
     if (!resp) { log.textContent = `✗ Failed at batch ${i+1}/${chunks.length}. ${totalWritten} rows written so far.`; return; }
     totalWritten += resp.written ?? chunks[i].length;
   }
@@ -2607,7 +2611,7 @@ async function pushNewToSheets() {
   // Ask the sheet for its most recent row (pull with a far-future since returns nothing,
   // so instead we pull everything-after the local second-to-last as a cheap probe).
   // Simpler: read the whole Log tab's max date via a dedicated GET.
-  const probe = await appsScriptCall('GET', null, 25000, 'Log', { latest: '1' });
+  const probe = await appsScriptCall('GET', null, 60000, 'Log', { latest: '1' });
   if (!probe) { log.textContent = 'Push-new failed: could not read Sheets.'; return; }
   const sheetLatest = probe.latest || '';
 
@@ -2635,7 +2639,7 @@ async function pushNewToSheets() {
   if (sameDay.length) {
     log.textContent = `Updating ${sheetLatest} in Sheets…`;
     for (const entry of sameDay) {
-      const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Log');
+      const resp = await appsScriptCall('POST', { mode: 'append', entry }, 60000, 'Log');
       if (!resp) { log.textContent = `✗ Failed updating ${sheetLatest}. ${written} rows written.`; return; }
       written++;
     }
@@ -2650,7 +2654,7 @@ async function pushNewToSheets() {
 
     for (let i = 0; i < chunks.length; i++) {
       log.textContent = `Pushing new batch ${i+1}/${chunks.length} (${chunks[i].length} rows)…`;
-      const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Log');
+      const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 60000, 'Log');
       if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} rows written.`; return; }
       written += resp.written ?? chunks[i].length;
     }
@@ -2665,7 +2669,7 @@ async function pushNewToSheets() {
 
 /* ── Finance tab push/pull (separate "Finance" sheet tab) ── */
 async function pushFinEntryToSheets(entry) {
-  const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Finance');
+  const resp = await appsScriptCall('POST', { mode: 'append', entry }, 60000, 'Finance');
   if (resp) toast('Finance month pushed ✓', 'ok');
 }
 
@@ -2694,7 +2698,7 @@ async function pullFinFromSheets(fullPull = false, replaceMode = false) {
     log.textContent = 'Pulling all Finance data from Sheets…';
   }
 
-  const resp = await appsScriptCall('GET', null, 25000, 'Finance', params);
+  const resp = await appsScriptCall('GET', null, 60000, 'Finance', params);
   if (!resp) { log.textContent = 'Finance pull failed.'; return; }
   try {
     const numericFields = ['year','monthNum','income','allowanceIncome','expDE','expTR',
@@ -2745,7 +2749,7 @@ async function pushAllFinToSheets() {
   for (let i = 0; i < chunks.length; i++) {
     const mode = i === 0 ? 'replaceAll' : 'appendBatch';
     log.textContent = `Pushing finance batch ${i+1}/${chunks.length}…`;
-    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 30000, 'Finance');
+    const resp = await appsScriptCall('POST', { mode, rows: chunks[i] }, 60000, 'Finance');
     if (!resp) { log.textContent = `✗ Failed at batch ${i+1}/${chunks.length}. ${totalWritten} rows written so far.`; return; }
     totalWritten += resp.written ?? chunks[i].length;
   }
@@ -2758,7 +2762,7 @@ async function pushNewFinToSheets() {
   const log = document.getElementById('sheetsLog');
   log.textContent = 'Checking latest month in Sheets…';
 
-  const probe = await appsScriptCall('GET', null, 25000, 'Finance', { latest: '1' });
+  const probe = await appsScriptCall('GET', null, 60000, 'Finance', { latest: '1' });
   if (!probe) { log.textContent = 'Push-new failed: could not read Sheets.'; return; }
   const sheetLatest = probe.latest || '';
 
@@ -2786,7 +2790,7 @@ async function pushNewFinToSheets() {
   if (sameMonth.length) {
     log.textContent = `Updating ${sheetLatest} in Sheets…`;
     for (const entry of sameMonth) {
-      const resp = await appsScriptCall('POST', { mode: 'append', entry }, 25000, 'Finance');
+      const resp = await appsScriptCall('POST', { mode: 'append', entry }, 60000, 'Finance');
       if (!resp) { log.textContent = `✗ Failed updating ${sheetLatest}. ${written} rows written.`; return; }
       written++;
     }
@@ -2800,7 +2804,7 @@ async function pushNewFinToSheets() {
     for (let i = 0; i < toPush.length; i += CHUNK) chunks.push(toPush.slice(i, i + CHUNK));
     for (let i = 0; i < chunks.length; i++) {
       log.textContent = `Pushing new finance batch ${i+1}/${chunks.length}…`;
-      const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 30000, 'Finance');
+      const resp = await appsScriptCall('POST', { mode: 'appendBatch', rows: chunks[i] }, 60000, 'Finance');
       if (!resp) { log.textContent = `✗ Failed at batch ${i+1}. ${written} rows written.`; return; }
       written += resp.written ?? chunks[i].length;
     }
