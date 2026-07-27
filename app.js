@@ -665,9 +665,16 @@ function saveEntry(ev) {
   const i = data.findIndex(x=>x.type==='daily'&&x.date===e.date);
   if (i>=0) data[i]=e; else data.push(e);
   data.sort((a,b)=>(a.date+a.type).localeCompare(b.date+b.type));
-  setData(data);
-  setStatus('Saved '+e.date);
-  toast('Day saved — '+e.date,'ok');
+  try {
+    const res = setLogSafe(data); // same quota-safe path used by import/pull
+    setStatus('Saved '+e.date);
+    toast(res.notesDropped ? 'Day saved (notes dropped — storage full) — '+e.date : 'Day saved — '+e.date, 'ok');
+  } catch (err) {
+    // Storage genuinely full even without notes — surface this loudly rather
+    // than pretending the day was saved when it was not.
+    toast('✗ Could NOT save '+e.date+' — device storage full. Free up space or push to Sheets first.', 'err');
+    return;
+  }
   const btn = document.getElementById('pushToSheets');
   if (getSheetId()) { btn.style.display=''; btn.dataset.date=e.date; }
   renderAll(false);
