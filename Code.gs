@@ -203,7 +203,13 @@ function doPost(e) {
         const targetKey = normalizeKey(body.entry[keyField]);
         for (let i = 0; i < dataRows.length; i++) {
           const rowKey = normalizeKey(dataRows[i][keyIdx]);
-          const labelMatch = labelIdx < 0 || String(dataRows[i][labelIdx] || '') === String(body.entry.label || '');
+          // For 'daily' rows the DATE alone is the identity. The label column holds
+          // whatever text the source used for the date ("22.7.2026" from one export,
+          // "2026-07-22" from another), so comparing it made the upsert miss and
+          // append a duplicate day. Only non-daily rows (labelled events) match on label.
+          const isDaily = String(body.entry.type) === 'daily';
+          const labelMatch = isDaily || labelIdx < 0 ||
+            String(dataRows[i][labelIdx] || '') === String(body.entry.label || '');
           if (String(dataRows[i][typeIdx]) === String(body.entry.type) && rowKey === targetKey && labelMatch) {
             sheet.getRange(i + 2, 1, 1, cols.length).setValues([row]);
             return jsonResponse_({ ok: true, updated: true, row: i + 2 });

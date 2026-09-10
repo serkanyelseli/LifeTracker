@@ -381,7 +381,7 @@ function calcNewScore(e) {
   const rs = read===0?-0.5 : read<10?0 : read<30?0.5 : 1;
 
   const ent = num0(e.tv)+num0(e.movies);
-  const es = ent>10?-0.5 : ent>=8?0 : ent>=5?0.5 : 1;
+  const es = ent>10?-0.5 : ent>=9?0 : ent>=6?0.5 : 1;
 
   const teeth = num0(e.teeth);
   const ts = teeth>=3?1 : teeth===2?0.5 : teeth===1?0 : -0.5;
