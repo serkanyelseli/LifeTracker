@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=57" />
+  <link rel="stylesheet" href="styles.css?v=58" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,8 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V5.0 · build 37</span>
+    <span class="version-badge">V5.0 · build 38</span>
+    <span id="liveModeBadge" style="display:none;background:#2e8b57;color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;margin-left:8px;letter-spacing:.04em">⚡ LIVE</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">Not connected</span>
@@ -534,6 +535,25 @@
 
   <!-- ── SYNC (Import/Export + Google Sheets) ── -->
   <section id="sync" class="view">
+    <div class="panel" id="liveModePanel">
+      <div class="panel-title">⚡ Live Sheets Mode</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+        For a device you use to VIEW the dashboard, not to hold the full history — this device
+        pulls fresh from Google Sheets into memory every time you open the app and renders every
+        view from that. Nothing is saved to this device's storage, so it never hits a storage limit.
+        You still need an internet connection when you open the app, and any entries you save here
+        go straight to Sheets rather than to this device.
+      </p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+          <input type="checkbox" id="liveModeToggle" style="width:18px;height:18px" />
+          Use Live Sheets Mode on this device
+        </label>
+        <button class="btn btn-sheets" id="liveModeReload" style="font-size:12px">↻ Reload live data now</button>
+      </div>
+      <div class="import-log" id="liveModeLog" style="margin-top:12px">Off — this device stores data normally.</div>
+    </div>
+
     <div class="panel">
       <div class="panel-title">Import CSV — Daily Log</div>
       <div class="import-zone" id="importZone">
@@ -1758,6 +1778,6 @@
   <!-- ── SCORING GUIDE ── -->
 
 </main>
-<script src="app.js?v=57"></script>
+<script src="app.js?v=58"></script>
 </body>
 </html>

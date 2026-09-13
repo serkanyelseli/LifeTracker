@@ -164,7 +164,79 @@ function mergeSet(map, e){
   if (!prev || _richness(e) >= _richness(prev)) map.set(k, e);
 }
 
-function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; } }
+/* ═══════════════════════════════════════════════════════════════
+   LIVE SHEETS MODE  (added build 38)
+   For a device with too little browser storage to hold the full
+   history (e.g. an iPad near its Safari quota) — or simply a device
+   meant only for VIEWING, never logging. Instead of importing into
+   localStorage, this mode pulls the full daily + finance data from
+   Google Sheets into ordinary JS memory once per page load and
+   renders every view from that. Nothing is written to localStorage,
+   so the persistent-storage quota is never touched. The only thing
+   persisted is a one-byte preference flag so the device remembers
+   to auto-load live on its next visit.
+   ═══════════════════════════════════════════════════════════════ */
+const LIVE_MODE_KEY = 'serkanLiveMode';
+let LIVE_MODE = localStorage.getItem(LIVE_MODE_KEY) === '1';
+let liveDailyData = null;   // in-memory only — never localStorage
+let liveFinData   = null;
+
+function isLiveMode() { return LIVE_MODE; }
+function updateLiveBadge() {
+  const b = document.getElementById('liveModeBadge');
+  if (b) b.style.display = LIVE_MODE ? '' : 'none';
+}
+function setLiveModePref(on) {
+  LIVE_MODE = !!on;
+  try { localStorage.setItem(LIVE_MODE_KEY, LIVE_MODE ? '1' : '0'); } catch(e) { /* the flag is 1 byte; if even this fails, live mode just won't persist across reloads, which is a harmless degradation */ }
+}
+
+/* Pull the FULL daily + finance history from Sheets straight into memory.
+   Reuses the exact field list pullFromSheets/pullFinFromSheets use, so a
+   live-mode row is numerically identical to what a normal pull would store. */
+async function loadLiveFromSheets() {
+  const log = document.getElementById('sheetsLog') || { textContent: '' };
+  if (!getSheetId()) { toast('Save your Apps Script URL first', 'err'); return false; }
+
+  log.textContent = 'Loading live dashboard from Sheets…';
+  const [logResp, finResp] = await Promise.all([
+    appsScriptCall('GET', null, 60000, 'Log', {}),
+    appsScriptCall('GET', null, 60000, 'Finance', {}),
+  ]);
+  if (!logResp || !finResp) {
+    log.textContent = '✗ Live load failed — check connection and try again.';
+    return false;
+  }
+
+  const NUM_FIELDS_LOG = ['prayTotal','reading','tv','movies','teeth','workout','sleep','weightKg','targetKg',
+    'deltaKg','water','german','nutrition','bonusMalus','newScore','score','year','month','day',
+    'prayS','prayO','prayIk','prayAk','prayY','prayNf','prayT'];
+  liveDailyData = (logResp.rows || []).map(r => {
+    NUM_FIELDS_LOG.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
+    return r;
+  });
+
+  const NUM_FIELDS_FIN = ['income','allowanceIncome','expDE','expTR','holdingEur','year','monthNum'];
+  liveFinData = (finResp.rows || []).map(r => {
+    NUM_FIELDS_FIN.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
+    return r;
+  });
+
+  log.textContent = `✓ Live: ${liveDailyData.length} daily + ${liveFinData.length} finance rows (session only, nothing stored).`;
+  return true;
+}
+
+/* getData/getFinData are the single read-path every view uses. In live mode
+   they serve the in-memory Sheets copy instead of localStorage, so every
+   existing renderer (Dashboard, Patterns, History, Finance Dashboard) works
+   unmodified — it never touches localStorage in live mode, so it can never
+   hit a quota wall. */
+function getData() {
+  if (LIVE_MODE && liveDailyData) return liveDailyData;
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+
+
 function setData(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 
 /* ── Quota-safe writes ───────────────────────────────────────────
@@ -199,7 +271,10 @@ function setLogSafe(rows) {
 }
 
 const FIN_STORAGE_KEY = 'serkanLifeTrackerV3_finance';
-function getFinData() { try { return JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]'); } catch(e) { return []; } }
+function getFinData() {
+  if (LIVE_MODE && liveFinData) return liveFinData;
+  try { return JSON.parse(localStorage.getItem(FIN_STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
 function setFinData(d) { localStorage.setItem(FIN_STORAGE_KEY, JSON.stringify(d)); }
 function getSheetId() { return localStorage.getItem(SHEET_ID_KEY) || ''; }
 function setSheetId(id) { localStorage.setItem(SHEET_ID_KEY, id); }
@@ -622,10 +697,25 @@ function loadSelectedFinMonth() {
   else { blankFinForm(true); setFinStatus('No entry for ' + m); }
 }
 
-function saveFinEntry(ev) {
+async function saveFinEntry(ev) {
   ev.preventDefault();
   const e = getFinFormEntry();
   if (!e || !e.month) return toast('Please select a month', 'err');
+
+  if (LIVE_MODE) {
+    if (!getSheetId()) { toast('✗ Live mode needs the Apps Script URL saved first','err'); return; }
+    liveFinData = liveFinData || [];
+    const i = liveFinData.findIndex(x => x.type==='daily-fin' && x.month===e.month);
+    if (i>=0) liveFinData[i]=e; else liveFinData.push(e);
+    setFinStatus('Pushing '+e.month+' to Sheets…');
+    const resp = await appsScriptCall('POST', { mode:'append', entry:e }, 60000, 'Finance');
+    if (!resp) { toast('✗ Could not reach Sheets — '+e.month+' NOT saved (live mode has no local copy)','err'); return; }
+    setFinStatus('Saved ' + e.month);
+    toast('Month saved to Sheets — ' + e.month, 'ok');
+    renderAll(false);
+    return;
+  }
+
   let data = getFinData();
   const i = data.findIndex(x => x.type==='daily-fin' && x.month===e.month);
   if (i>=0) data[i]=e; else data.push(e);
@@ -657,10 +747,27 @@ function loadSelectedDate() {
   else { blankForm(true); setStatus('No entry for '+d); }
 }
 
-function saveEntry(ev) {
+async function saveEntry(ev) {
   ev.preventDefault();
   const e = getFormEntry();
   if (!e.date) return toast('Please select a date','err');
+
+  if (LIVE_MODE) {
+    // Live mode never writes localStorage — update the in-memory copy and
+    // push straight to Sheets so it's not lost when the tab closes.
+    if (!getSheetId()) { toast('✗ Live mode needs the Apps Script URL saved first','err'); return; }
+    liveDailyData = liveDailyData || [];
+    const i = liveDailyData.findIndex(x=>x.type==='daily'&&x.date===e.date);
+    if (i>=0) liveDailyData[i]=e; else liveDailyData.push(e);
+    setStatus('Pushing '+e.date+' to Sheets…');
+    const resp = await appsScriptCall('POST', { mode:'append', entry:e }, 60000, 'Log');
+    if (!resp) { toast('✗ Could not reach Sheets — '+e.date+' NOT saved (live mode has no local copy)','err'); return; }
+    setStatus('Saved '+e.date);
+    toast('Day saved to Sheets — '+e.date, 'ok');
+    renderAll(false);
+    return;
+  }
+
   let data = getData();
   const i = data.findIndex(x=>x.type==='daily'&&x.date===e.date);
   if (i>=0) data[i]=e; else data.push(e);
@@ -3104,14 +3211,64 @@ document.addEventListener('DOMContentLoaded', () => {
   // Patterns year selector
   document.getElementById('patternYearSelect')?.addEventListener('change', renderPatterns);
 
+  // ── Live Sheets Mode wiring ──
+  const liveToggle = document.getElementById('liveModeToggle');
+  const liveLog = document.getElementById('liveModeLog');
+  if (liveToggle) {
+    liveToggle.checked = LIVE_MODE;
+    liveToggle.addEventListener('change', async () => {
+      setLiveModePref(liveToggle.checked);
+      updateLiveBadge();
+      if (LIVE_MODE) {
+        liveLog.textContent = 'Loading…';
+        const ok = await loadLiveFromSheets();
+        liveLog.textContent = ok
+          ? `On — ${liveDailyData.length} daily + ${liveFinData.length} finance rows loaded (session only).`
+          : 'On, but the initial load failed — tap Reload to try again.';
+      } else {
+        liveDailyData = null; liveFinData = null;
+        liveLog.textContent = 'Off — this device stores data normally.';
+      }
+      renderAll(false);
+    });
+  }
+  const liveReload = document.getElementById('liveModeReload');
+  if (liveReload) {
+    liveReload.addEventListener('click', async () => {
+      liveLog.textContent = 'Reloading…';
+      const ok = await loadLiveFromSheets();
+      liveLog.textContent = ok
+        ? `✓ Refreshed — ${liveDailyData.length} daily + ${liveFinData.length} finance rows (session only).`
+        : '✗ Reload failed — check connection.';
+      if (ok) renderAll(false);
+    });
+  }
+
   // Boot — open on Dashboard (Option 3: smart default)
   ensureYearSelectors();
   updatePreview();
   updateSheetUI();
-  loadSelectedDate();
-  renderHistory();
-  renderTodayReminder();
-  renderDashboard(); // Dashboard is now the default active view
+  updateLiveBadge();
+  if (LIVE_MODE) {
+    // This device prefers Live Mode — pull fresh before the first render
+    // rather than showing an empty dashboard from an untouched localStorage.
+    if (liveToggle) liveToggle.checked = true;
+    if (liveLog) liveLog.textContent = 'Loading live data…';
+    loadLiveFromSheets().then(ok => {
+      if (liveLog) liveLog.textContent = ok
+        ? `On — ${liveDailyData.length} daily + ${liveFinData.length} finance rows loaded (session only).`
+        : 'On, but the initial load failed — tap Reload to try again.';
+      loadSelectedDate();
+      renderHistory();
+      renderTodayReminder();
+      renderDashboard();
+    });
+  } else {
+    loadSelectedDate();
+    renderHistory();
+    renderTodayReminder();
+    renderDashboard(); // Dashboard is now the default active view
+  }
 });
 
 /* Show a reminder banner on Daily Entry if today or tomorrow has events */
