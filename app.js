@@ -1448,7 +1448,15 @@ function chartDefaults(labels, datasets, opts={}) {
         datalabels: {
           ...valueLabel(opts.decimals ?? 1),
           align: 'top', anchor: 'end', offset: 4,
-          display: ctx => ctx.dataset.borderDash ? false : (ctx.dataset.data[ctx.dataIndex] !== null),
+          // Dashed reference lines (yearly/all-time averages) show their value
+          // ONCE, at the first point, rather than at every point — repeating a
+          // flat number across every month would just be noise. Colored to
+          // match the line itself so it reads as "this is the average", not
+          // as another real data point.
+          color: ctx => ctx.dataset.borderDash ? ctx.dataset.borderColor : '#cdd7ea',
+          display: ctx => ctx.dataset.borderDash
+            ? ctx.dataIndex === 0
+            : (ctx.dataset.data[ctx.dataIndex] !== null),
         }
       },
       scales: {
