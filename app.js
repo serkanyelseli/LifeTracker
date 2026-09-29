@@ -30,7 +30,7 @@ const EXP_TR_PARTS = [...TR_MOM_PARTS, ...TR_OTHERS_PARTS]; // all 12 TR fields,
 const FIN_ENTRY_FIELDS = ['month','income','allowanceIncome','expDE','expTR','notes',
   'holdingEur','holdingTry','eurTryRate','trMomTl','trOthersTl', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 const FIN_EXPORT_COLS = ['type','month','year','monthNum','income','allowanceIncome','expDE','expTR',
-  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'trMomTl','trOthersTl','holdingEur','holdingTry','eurTryRate','notes'];
+  ...EXP_DE_PARTS, ...EXP_TR_PARTS, 'trMomTl','trOthersTl','invGain','holdingEur','holdingTry','eurTryRate','notes'];
 
 /* ── Historical data — exact values from Dashboard sheet ── */
 // avgScore / newAvgScore: null means not tracked that year
@@ -216,7 +216,7 @@ async function loadLiveFromSheets() {
     return r;
   });
 
-  const NUM_FIELDS_FIN = ['income','allowanceIncome','expDE','expTR','holdingEur','year','monthNum'];
+  const NUM_FIELDS_FIN = ['income','allowanceIncome','expDE','expTR','invGain','holdingEur','year','monthNum'];
   liveFinData = (finResp.rows || []).map(r => {
     NUM_FIELDS_FIN.forEach(k => { if (r[k] !== null && r[k] !== undefined && r[k] !== '') r[k] = parseNum(r[k]) ?? r[k]; });
     return r;
@@ -1834,7 +1834,7 @@ function finYearlyAggregate() {
     const monthly = data.filter(d => d.year===y && d.type==='daily-fin');
     const seededYear = data.find(d => d.year===y && d.type==='yearly');
     if (monthly.length) {
-      const row = { y, income: sumField(monthly,'income'), allowanceIncome: sumField(monthly,'allowanceIncome'), expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR') };
+      const row = { y, income: sumField(monthly,'income'), allowanceIncome: sumField(monthly,'allowanceIncome'), expDE: sumField(monthly,'expDE'), tr: sumField(monthly,'expTR'), invGain: sumField(monthly,'invGain') };
       EXP_DE_PARTS.forEach(c => row[c] = sumField(monthly, c));
       const momSum = sumField(monthly, 'trMomVarious');
       const othersSum = sumField(monthly, 'trOthersVarious');
@@ -1846,11 +1846,11 @@ function finYearlyAggregate() {
       return row;
     }
     if (seededYear) {
-      const row = { y, income: seededYear.income, allowanceIncome: seededYear.allowanceIncome ?? null, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null };
+      const row = { y, income: seededYear.income, allowanceIncome: seededYear.allowanceIncome ?? null, expDE: seededYear.expDE, tr: seededYear.expTR, trMom: null, trOthers: null, invGain: null };
       EXP_DE_PARTS.forEach(c => row[c] = null);
       return row;
     }
-    const row = { y, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null };
+    const row = { y, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null, invGain: null };
     EXP_DE_PARTS.forEach(c => row[c] = null);
     return row;
   });
@@ -1865,11 +1865,11 @@ function finMonthlyForYear(y) {
     const seeded = !real ? data.find(d => d.year===Number(y) && d.monthNum===m && d.type==='monthly') : null;
     const src = real || seeded;
     if (!src) {
-      const row = { m, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null };
+      const row = { m, income: null, allowanceIncome: null, expDE: null, tr: null, trMom: null, trOthers: null, invGain: null };
       EXP_DE_PARTS.forEach(c => row[c] = null);
       return row;
     }
-    const row = { m, income: src.income, allowanceIncome: src.allowanceIncome ?? null, expDE: src.expDE, tr: src.expTR };
+    const row = { m, income: src.income, allowanceIncome: src.allowanceIncome ?? null, expDE: src.expDE, tr: src.expTR, invGain: src.invGain ?? null };
     EXP_DE_PARTS.forEach(c => row[c] = src[c] ?? null);
     const momExtra = TR_MOM_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
     const othersExtra = TR_OTHERS_PARTS.reduce((s,f)=>{ const v=src[f]; return v!=null ? s+v : s; }, 0);
@@ -1917,9 +1917,11 @@ function renderFinDashKpis() {
     // For historical years, Expenses DE were not tracked; treat missing ExpDE as 0.
     // Allowance is also optional and treated as 0 when not present.
     // Only missing salary/allowance income AND TR payments should make the net cashflow incomplete.
+    // Investment gain is a bonus figure some years simply won't have — its absence
+    // never makes a year "partial", it just contributes 0 the same as missing ExpDE.
     if (!row || (totalInc == null && row.tr == null)) return { net:null, partial:false };
     const partial = totalInc == null || row.tr == null;
-    const net = (totalInc ?? 0) - (row.expDE ?? 0) - (row.tr ?? 0);
+    const net = (totalInc ?? 0) - (row.expDE ?? 0) - (row.tr ?? 0) + (row.invGain ?? 0);
     return { net: round3(net), partial };
   }
   const { net:netA, partial:partialA } = calcNet(a);
@@ -1957,6 +1959,7 @@ function renderFinDashKpis() {
     (showAllowance ? finCard('Allowance Income', a.allowanceIncome, b?.allowanceIncome, 'k€', false) : '') +
     finCard('Expenses DE',      a.expDE,            b?.expDE,           'k€', true)  +
     finCard('TR Payments',      a.tr,               b?.tr,              'k€', true)  +
+    (a.invGain!=null || b?.invGain!=null ? finCard('Investment Gain', a.invGain, b?.invGain, 'k€', false) : '') +
     finCard('Net Cashflow',     netA,               netB,               'k€', false, 2, partialA) +
     '<div class="fin-card" id="fxRateCard"><div class="fin-title">EUR / TRY · Live rate</div>' +
     '<div class="fin-value" style="font-size:1.4rem">fetching...</div></div>' +
@@ -2083,7 +2086,7 @@ function renderFinDashCharts() {
     }
   };
 
-  let labels, incomeSeries, allowanceSeries, expDESeries, trSeries, deCatRows, trMomSeries, trOthersSeries;
+  let labels, incomeSeries, allowanceSeries, expDESeries, trSeries, invSeries, deCatRows, trMomSeries, trOthersSeries;
 
   if (view === 'yearly') {
     const yearly = finYearlyAggregate();
@@ -2092,6 +2095,7 @@ function renderFinDashCharts() {
     allowanceSeries = yearly.map(f => f.allowanceIncome);
     expDESeries  = yearly.map(f => f.expDE);
     trSeries     = yearly.map(f => f.tr);
+    invSeries    = yearly.map(f => f.invGain);
     deCatRows    = yearly;
     trMomSeries    = yearly.map(f => f.trMom);
     trOthersSeries = yearly.map(f => f.trOthers);
@@ -2106,6 +2110,7 @@ function renderFinDashCharts() {
     allowanceSeries = monthly.map(m => m.allowanceIncome);
     expDESeries  = monthly.map(m => m.expDE);
     trSeries     = monthly.map(m => m.tr);
+    invSeries    = monthly.map(m => m.invGain);
     deCatRows    = monthly;
     trMomSeries    = monthly.map(m => m.trMom);
     trOthersSeries = monthly.map(m => m.trOthers);
@@ -2170,10 +2175,10 @@ function renderFinDashCharts() {
   // contribution from what we have. Years with truly nothing show no bar.
   destroyChart('finDashNet');
   const netSeries = labels.map((_, i) => {
-    const inc = incomeSeries[i], allowance = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i];
+    const inc = incomeSeries[i], allowance = allowanceSeries[i], de = expDESeries[i], tr = trSeries[i], inv = invSeries[i];
     const totalInc = (inc ?? 0) + (allowance ?? 0);
-    if (inc==null && allowance==null && de==null && tr==null) return null; // nothing at all known
-    return round3(totalInc - (de ?? 0) - (tr ?? 0));
+    if (inc==null && allowance==null && de==null && tr==null && inv==null) return null; // nothing at all known
+    return round3(totalInc - (de ?? 0) - (tr ?? 0) + (inv ?? 0));
   });
   const netIncomplete = labels.map((_, i) => (incomeSeries[i]==null && allowanceSeries[i]==null) || trSeries[i]==null);
   const netColors = netSeries.map((v,i) => {
@@ -2243,7 +2248,7 @@ function renderFinDashCharts() {
   let running = 0;
   const cumulSeries = yearly.map(f => {
     const inc = (f.income??0) + (f.allowanceIncome??0);
-    const net = inc - (f.expDE??0) - (f.tr??0);
+    const net = inc - (f.expDE??0) - (f.tr??0) + (f.invGain??0);
     running = round3(running + net);
     return running;
   });
@@ -2428,7 +2433,7 @@ function importCsvText(text) {
    semicolon-separated. This is the format produced by exportFinCsv() below,
    and also what Claude generates when processing a source spreadsheet. ── */
 const FIN_NUMERIC_COLS = ['year','monthNum','income','allowanceIncome','expDE','expTR',
-  'holdingEur','holdingTry','eurTryRate','trMomTl','trOthersTl', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
+  'holdingEur','holdingTry','eurTryRate','trMomTl','trOthersTl','invGain', ...EXP_DE_PARTS, ...EXP_TR_PARTS];
 
 function importFinCsvText(text) {
   const rows = parseCSV(text);
