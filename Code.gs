@@ -21,7 +21,7 @@ const FIN_HEADERS = ['type','month','year','monthNum','income','allowanceIncome'
   'expHousehold','expFamily','expPotisko','expTransport','expGrocery','expEatOut','expOthers',
   'trAidat','trElektrik','trSu','trDogalgaz','trInternet','trMomVarious',
   'trEmlakVergisi','trGoogle','trSpotify','trYoutube','trAmazonTR','trOthersVarious',
-  'trMomTl','trOthersTl','holdingEur','holdingTry','eurTryRate','notes'];
+  'trMomTl','trOthersTl','invGain','holdingEur','holdingTry','eurTryRate','notes'];
 
 function getTabConfig_(tabName) {
   if (tabName === FIN_TAB_NAME) return { name: FIN_TAB_NAME, headers: FIN_HEADERS, keyField: 'month' };

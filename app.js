@@ -800,6 +800,32 @@ function deleteDay() {
    NAVIGATION
 ════════════════════════════════════════════ */
 /* ════════════════════════════════════════════
+   REFERENCE DATA  (build 41)
+   reference.json is written by convert_all.py from the master Excel
+   (SpecialDays, Places_Days, Countries, Library v4) and sits next to
+   index.html. Read-only: edit the Excel, re-run the converter, upload.
+════════════════════════════════════════════ */
+let REF = null;
+async function loadReference() {
+  try {
+    const r = await fetch('reference.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (j && typeof j === 'object') REF = j;
+  } catch (e) { REF = null; }
+  const act = document.querySelector('.view.active');
+  if (act) refreshRefView(act.id);
+}
+function refreshRefView(id) {
+  if (id === 'calendar') renderCalendar();
+  else if (id === 'places') renderPlaces();
+  else if (id === 'countries') renderCountries();
+  else if (id === 'library') renderLibrary();
+}
+const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const _isRefEvent = e => /^x\d+$/.test(e.id || '');
+
+/* ════════════════════════════════════════════
    CALENDAR & REMINDERS
 ════════════════════════════════════════════ */
 const CAL_STORAGE_KEY = 'serkanCalendarV1';
@@ -865,12 +891,23 @@ function seedCalendarIfNeeded() {
 let calViewYear  = new Date().getFullYear();
 let calViewMonth = new Date().getMonth() + 1; // 1-12
 
+/* Events shown in the calendar. With reference.json loaded the Excel is the single
+   source (birthdays, special days, school vacations) + fetched public holidays;
+   without it we fall back to the old in-browser list. */
+function calViewEvents() {
+  if (!REF || !Array.isArray(REF.events)) return getCalEvents();
+  return REF.events.concat(getCalEvents().filter(e => String(e.id || '').startsWith('nager_')));
+}
+const _iso = (y, m, d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+function eventMatches(e, y, m, d) {
+  if (e.start && e.end) { const t = _iso(y, m, d); return t >= e.start && t <= e.end; }
+  if (e.recurring) return e.month === m && e.day === d;
+  return (e.year || 0) === y && e.month === m && e.day === d;
+}
+
 /* Returns events that apply on a given {year, month, day} */
 function eventsOnDay(year, month, day) {
-  return getCalEvents().filter(e => {
-    if (e.recurring) return e.month === month && e.day === day;
-    return (e.year || 0) === year && e.month === month && e.day === day;
-  });
+  return calViewEvents().filter(e => eventMatches(e, year, month, day));
 }
 
 /* Returns all events occurring in the next `days` calendar days from today */
@@ -878,15 +915,20 @@ function upcomingEvents(days=30) {
   const today = new Date(); today.setHours(0,0,0,0);
   const end = new Date(today); end.setDate(end.getDate() + days);
   const results = [];
-  const allEvents = getCalEvents();
+  const allEvents = calViewEvents();
+  // Period events (school vacations) are listed once: ongoing, or starting inside the window
+  allEvents.filter(e => e.start && e.end).forEach(e => {
+    const s = new Date(e.start + 'T00:00:00'), f = new Date(e.end + 'T00:00:00');
+    if (f < today || s > end) return;
+    const daysAway = Math.max(0, Math.round((s - today) / 86400000));
+    results.push({ ...e, occursOn: s > today ? s : new Date(today), daysAway, ongoing: s <= today, until: f });
+  });
   // Iterate day by day
   const cur = new Date(today);
   while (cur <= end) {
     const y = cur.getFullYear(), m = cur.getMonth()+1, d = cur.getDate();
-    allEvents.forEach(e => {
-      const matches = e.recurring
-        ? e.month === m && e.day === d
-        : (e.year||0) === y && e.month === m && e.day === d;
+    allEvents.filter(e => !(e.start && e.end)).forEach(e => {
+      const matches = eventMatches(e, y, m, d);
       if (matches) {
         const daysAway = Math.round((cur - today) / 86400000);
         results.push({ ...e, occursOn: new Date(cur), daysAway });
@@ -899,6 +941,11 @@ function upcomingEvents(days=30) {
 
 function renderCalendar() {
   seedCalendarIfNeeded();
+  const managed = !!(REF && Array.isArray(REF.events));
+  ['calSchoolPanel', 'calEditPanel'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = managed ? 'none' : ''; });
+  const note = document.getElementById('calManagedNote');
+  if (note) { note.style.display = managed ? '' : 'none';
+    if (managed) note.textContent = `Birthdays, special days and school vacations come from your master Excel (SpecialDays sheet) · reference.json generated ${REF.generated || '—'}. Edit the Excel and re-run convert_all.py to change them.`; }
   renderCalGrid();
   renderUpcoming();
   renderEventList();
@@ -925,9 +972,9 @@ function renderCalGrid() {
     const thisDate = new Date(y, m-1, d); thisDate.setHours(0,0,0,0);
     const isToday = thisDate.getTime() === today.getTime();
     const events = eventsOnDay(y, m, d);
-    const dots = events.map(e => `<span class="cal-dot ${CAL_TYPES[e.type]?.cls||'other'}" title="${e.name}"></span>`).join('');
+    const dots = events.map(e => `<span class="cal-dot ${CAL_TYPES[e.type]?.cls||'other'}" title="${_esc(e.name)}"></span>`).join('');
     html += `<div class="cal-day${isToday?' today':''}${events.length?' has-events':''}"
-      onclick="calDayClick(${y},${m},${d})" title="${events.map(e=>CAL_TYPES[e.type]?.icon+' '+e.name).join('\n')||''}">
+      onclick="calDayClick(${y},${m},${d})" title="${_esc(events.map(e=>CAL_TYPES[e.type]?.icon+' '+e.name).join('\n')||'')}">
       <div class="cal-day-num">${d}</div>
       <div class="cal-day-dots">${dots}</div>
     </div>`;
@@ -957,32 +1004,38 @@ function renderUpcoming() {
     const t = CAL_TYPES[e.type] || CAL_TYPES.other;
     const dateLabel = `${String(e.occursOn.getDate()).padStart(2,'0')} ${MONTHS[e.occursOn.getMonth()]}`;
     let daysTag, daysClass;
-    if (e.daysAway === 0) { daysTag = 'Today!'; daysClass = 'today-tag'; }
+    if (e.ongoing) { daysTag = `until ${String(e.until.getDate()).padStart(2,'0')} ${MONTHS[e.until.getMonth()]}`; daysClass = 'soon-tag'; }
+    else if (e.daysAway === 0) { daysTag = 'Today!'; daysClass = 'today-tag'; }
     else if (e.daysAway <= 3) { daysTag = `In ${e.daysAway}d`; daysClass = 'soon-tag'; }
     else { daysTag = `In ${e.daysAway}d`; daysClass = 'future-tag'; }
     return `<div class="upcoming-event">
       <span class="upcoming-date">${dateLabel}</span>
       <span class="upcoming-badge">${t.icon}</span>
-      <span class="upcoming-name">${e.name}</span>
+      <span class="upcoming-name">${_esc(e.name)}</span>
       <span class="upcoming-days ${daysClass}">${daysTag}</span>
     </div>`;
   }).join('');
 }
 
 function renderEventList() {
-  const events = [...getCalEvents()].sort((a,b) => a.month!==b.month ? a.month-b.month : a.day-b.day);
+  const events = [...calViewEvents()].sort((a,b) => a.month!==b.month ? a.month-b.month : a.day!==b.day ? a.day-b.day : (a.year||0)-(b.year||0));
   if (!events.length) { document.getElementById('calEventList').innerHTML = '<p style="color:var(--muted);font-size:13px">No events yet.</p>'; return; }
   document.getElementById('calEventList').innerHTML = events.map(e => {
     const t = CAL_TYPES[e.type] || CAL_TYPES.other;
-    const dateLabel = `${String(e.day).padStart(2,'0')}/${String(e.month).padStart(2,'0')}`;
-    const recurLabel = e.recurring ? '↻ annual' : `${e.year} only`;
+    let dateLabel = `${String(e.day).padStart(2,'0')}/${String(e.month).padStart(2,'0')}`;
+    let recurLabel = e.recurring ? '↻ annual' : `${e.year} only`;
+    if (e.start && e.end) {
+      const [, em, ed] = e.end.split('-');
+      dateLabel = `${String(e.day).padStart(2,'0')}/${String(e.month).padStart(2,'0')} → ${ed}/${em}`;
+      recurLabel = e.year + (e.end.slice(0,4) !== e.start.slice(0,4) ? '–' + e.end.slice(0,4) : '');
+    }
     return `<div class="cal-event-item">
       <span class="cal-event-date">${dateLabel}</span>
       <span style="font-size:14px">${t.icon}</span>
-      <span class="cal-event-name">${e.name}</span>
+      <span class="cal-event-name">${_esc(e.name)}</span>
       <span class="cal-event-type ${e.type}">${t.label}</span>
       <span class="cal-event-recurring">${recurLabel}</span>
-      <button class="cal-delete-btn" onclick="deleteCalEvent('${e.id}')" title="Delete">✕</button>
+      ${_isRefEvent(e) ? '' : `<button class="cal-delete-btn" onclick="deleteCalEvent('${e.id}')" title="Delete">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -1285,7 +1338,7 @@ function switchView(v) {
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   // These views live under "More ▾" — light it up when one is showing.
   const moreBtn = document.getElementById('navMoreBtn');
-  const inMore = ['entry','finEntry','patterns','places','countries','history','guide'];
+  const inMore = ['entry','finEntry','patterns','places','countries','library','history','guide'];
   if (moreBtn) moreBtn.classList.toggle('active', inMore.includes(v));
   if (v==='dashboard') renderDashboard();
   else if (v==='finDashboard') renderFinDashboard();
@@ -1294,6 +1347,7 @@ function switchView(v) {
   else if (v==='calendar') renderCalendar();
   else if (v==='places') renderPlaces();
   else if (v==='countries') renderCountries();
+  else if (v==='library') renderLibrary();
   // 'guide' and 'sync' are static — no render needed
   // close the More menu whenever a view changes
   const mm = document.getElementById('navMoreMenu');
@@ -2977,7 +3031,9 @@ function renderAll(reloadSelectors=true) {
    INIT
 ════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  loadReference();   // reference.json (places, countries, special days, library) — non-blocking
   document.getElementById('date').value = todayISO();
+  ['libSearch','libStatus','libGenre'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener(id==='libSearch'?'input':'change', renderLibrary); });
 
   // Live score preview — prayer parts get their own handler (they also update the total field)
   ENTRY_FIELDS.forEach(f => {
@@ -3320,29 +3376,55 @@ const PLACES_DATA = {"phys": {"2007": {"Turkey": 332, "Italy": 33}, "2008": {"Tu
 const PLACES_COL = {Turkey:'#2e8b57',Italy:'#8c2f39',USA:'#4a6b9c',Germany:'#c9a227',Other:'#8b7fd6'};
 const PLACES_ORDER = ['Turkey','Italy','USA','Germany','Other'];
 
+/* Places data: from reference.json (Places_Days + Countries sheets) when loaded, else the baked-in copy.
+   Countries you did not live in are folded into "Other" for the chart; the detail stays in the tooltip. */
+function getPlacesData(){
+  if(!REF || !REF.places || !REF.places.phys || !Object.keys(REF.places.phys).length){
+    return {PHYS:PLACES_DATA.phys, LIFE:PLACES_DATA.life, ord:PLACES_ORDER, col:c=>PLACES_COL[c]||'#888', DET:{}, livedN:4};
+  }
+  const lived=new Set((REF.countries||[]).filter(c=>String(c.status).toLowerCase()==='lived').map(c=>c.name));
+  if(!lived.size) PLACES_ORDER.forEach(c=>{ if(c!=='Other') lived.add(c); });
+  const PHYS={}, DET={}, LIFE={};
+  Object.entries(REF.places.phys).forEach(([y,rec])=>{
+    PHYS[y]={}; const oth=[];
+    Object.entries(rec).forEach(([c,n])=>{
+      if(lived.has(c)) PHYS[y][c]=(PHYS[y][c]||0)+n;
+      else { PHYS[y].Other=(PHYS[y].Other||0)+n; oth.push(c+' '+n); }
+    });
+    if(oth.length) DET[y]=oth.join(', ');
+  });
+  Object.values(PHYS).forEach(rec=>Object.entries(rec).forEach(([c,n])=>{LIFE[c]=(LIFE[c]||0)+n;}));
+  const known=PLACES_ORDER.filter(c=>c!=='Other'&&lived.has(c));
+  const extra=[...lived].filter(c=>!PLACES_ORDER.includes(c)).sort((x,y)=>(LIFE[y]||0)-(LIFE[x]||0));
+  const ord=[...known,...extra,'Other'];
+  const pal=['#d9822b','#3aa6a0','#b5547c','#7aa23f'];
+  const col=c=>PLACES_COL[c]||pal[Math.max(0,extra.indexOf(c))%pal.length];
+  return {PHYS,LIFE,ord,col,DET,livedN:lived.size};
+}
+
 function renderPlaces(){
-  const PHYS=PLACES_DATA.phys, LIFE=PLACES_DATA.life;
+  const PD=getPlacesData(), PHYS=PD.PHYS, LIFE=PD.LIFE, PORDER=PD.ord, PCOL=PD.col;
   const yleap=y=>(y%4===0&&(y%100!==0||y%400===0))?366:365;
   const totalDays=Object.values(LIFE).reduce((a,b)=>a+b,0);
-  const order=PLACES_ORDER.filter(c=>LIFE[c]);
+  const order=PORDER.filter(c=>LIFE[c]);
 
   // stats
   document.getElementById('placesStats').innerHTML =
     `<div><span style="font-size:1.7rem;font-weight:700;color:#2e8b57">${(totalDays/365.25).toFixed(0)}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">years recorded</span></div>`+
-    `<div><span style="font-size:1.7rem;font-weight:700;color:#4a6b9c">4</span><span style="color:var(--muted);font-size:12px;margin-left:5px">countries lived in</span></div>`;
+    `<div><span style="font-size:1.7rem;font-weight:700;color:#4a6b9c">${PD.livedN}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">countries lived in</span></div>`;
 
   // lifetime strip
   const lb=document.getElementById('lifeBar'); lb.innerHTML='';
   order.forEach(c=>{
     const d=LIFE[c],pct=d/totalDays*100,yrs=(d/365.25).toFixed(1);
     const seg=document.createElement('div');
-    seg.style.cssText=`background:${PLACES_COL[c]};width:${pct}%;display:flex;align-items:center;justify-content:center;min-width:2px`;
+    seg.style.cssText=`background:${PCOL(c)};width:${pct}%;display:flex;align-items:center;justify-content:center;min-width:2px`;
     seg.innerHTML = pct>7?`<span style="font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);white-space:nowrap;padding:0 4px">${c==='Other'?'':c+' · '}${yrs}y</span>`:'';
     seg.title=`${c}: ${yrs} years (${pct.toFixed(1)}%)`;
     lb.appendChild(seg);
   });
   document.getElementById('lifeLegend').innerHTML = order.map(c=>
-    `<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:${PLACES_COL[c]};display:inline-block"></span>${c} · <b style="color:var(--text)">${(LIFE[c]/365.25).toFixed(1)}</b> yr</div>`).join('');
+    `<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:${PCOL(c)};display:inline-block"></span>${c} · <b style="color:var(--text)">${(LIFE[c]/365.25).toFixed(1)}</b> yr</div>`).join('');
 
   // per-year bars with collapsed opener
   const COLLAPSED='1979-2006';
@@ -3359,11 +3441,11 @@ function renderPlaces(){
     const cx=xcur+slot/2;
     const denom=isCol?(rec.Turkey||1):maxDays;
     let acc=0;
-    PLACES_ORDER.forEach(c=>{
+    PORDER.forEach(c=>{
       const d=rec[c]||0; if(!d) return;
       const frac=d/denom, h=(H-padB-padT)*frac;
       const yTop=(H-padB)-((H-padB-padT)*(acc/denom))-h;
-      s+=`<rect class="pbar" x="${cx-barW/2}" y="${yTop}" width="${barW}" height="${h}" fill="${PLACES_COL[c]}" data-k="${key}" rx="1.5"/>`;
+      s+=`<rect class="pbar" x="${cx-barW/2}" y="${yTop}" width="${barW}" height="${h}" fill="${PCOL(c)}" data-k="${key}" rx="1.5"/>`;
       acc+=d;
     });
     if(isCol){ s+=`<text x="${cx}" y="${H-padB+13}" text-anchor="middle" style="font-size:9px;fill:var(--muted);font-family:monospace">1979–2006</text>`; }
@@ -3377,7 +3459,7 @@ function renderPlaces(){
     const rec=PHYS[b.dataset.k];
     const txt=b.dataset.k==='1979-2006'
       ? `1979–2006 · Turkey ${(rec.Turkey/365.25).toFixed(0)} yr`
-      : `${b.dataset.k}: `+PLACES_ORDER.filter(c=>rec[c]).map(c=>`${c} ${rec[c]}d`).join(', ');
+      : `${b.dataset.k}: `+PORDER.filter(c=>rec[c]).map(c=>`${c} ${rec[c]}d`).join(', ')+(PD.DET[b.dataset.k]?` (Other: ${PD.DET[b.dataset.k]})`:'');
     b.innerHTML=`<title>${txt}</title>`;
   });
   document.getElementById('placesFoot').textContent =
@@ -3392,8 +3474,10 @@ const CONTINENT={TR:'Asia/Europe',RU:'Europe/Asia',US:'N.America',CA:'N.America'
 let _countriesRendered=false;
 function renderCountries(){
   const isoOf=n=>NAME2ISO[n.trim().toLowerCase()]||null;
+  const CL = (REF && Array.isArray(REF.countries) && REF.countries.length) ? REF.countries : COUNTRY_LIST.map(n=>({name:n,status:'Visited',note:''}));
+  const CNAMES = CL.map(c=>c.name);
   const isoSet=new Set(); const unmatched=[];
-  COUNTRY_LIST.forEach(n=>{const c=isoOf(n); if(c)isoSet.add(c); else unmatched.push(n);});
+  CNAMES.forEach(n=>{const c=isoOf(n); if(c)isoSet.add(c); else unmatched.push(n);});
   const svg=document.getElementById('worldMap');
   // reset + paint
   svg.querySelectorAll('path').forEach(p=>{ p.style.fill='#2a313c'; p.style.stroke='#0f1216'; p.style.strokeWidth='0.5'; });
@@ -3408,9 +3492,63 @@ function renderCountries(){
     `<div><span style="font-size:1.7rem;font-weight:700;color:#4a6b9c">${conts.size}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">continents touched</span></div>`+
     `<div><span style="font-size:1.7rem;font-weight:700;color:#c9a227">${Math.round(isoSet.size/195*100)}</span><span style="color:var(--muted);font-size:12px;margin-left:5px">% of ~195</span></div>`;
   const micros=new Set(['SM','MC','VA','LI']);
-  document.getElementById('countryChips').innerHTML = COUNTRY_LIST.filter(isoOf).map(n=>{
-    const tiny=micros.has(isoOf(n));
-    return `<div style="background:var(--surface);border:1px ${tiny?'dashed':'solid'} var(--border);border-radius:999px;padding:5px 12px;font-size:13px;color:${tiny?'var(--muted)':'var(--text)'};display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#2e8b57"></span>${n}</div>`;
-  }).join('');
+  document.getElementById('countryChips').innerHTML = CL.filter(c=>isoOf(c.name)).map(c=>{
+    const n=c.name, tiny=micros.has(isoOf(n));
+    const note=c.note||'', short=note && note.length<=22 && !/fill in/i.test(note);
+    const tip=_esc([c.status, note].filter(Boolean).join(' · '));
+    return `<div title="${tip}" style="background:var(--surface);border:1px ${tiny?'dashed':'solid'} var(--border);border-radius:999px;padding:5px 12px;font-size:13px;color:${tiny?'var(--muted)':'var(--text)'};display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#2e8b57"></span>${_esc(n)}${short?`<span style="color:var(--muted);font-size:11px">· ${_esc(note)}</span>`:''}</div>`;
+  }).join('') + (unmatched.length?`<div style="font-size:12px;color:#f59e0b;padding:5px 4px">Not on the map (unknown name): ${_esc(unmatched.join(', '))}</div>`:'');
   _countriesRendered=true;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LIBRARY  (read-only view of the "Library v4" sheet, columns A–D · build 41)
+   ═══════════════════════════════════════════════════════════════ */
+let _libSort = { key: 'status', dir: 1 };
+const _LIB_STATUS_ORDER = { 'reading': 0, 'to read': 1, 'completed': 2 };
+function renderLibrary() {
+  const host = document.getElementById('libraryBody');
+  if (!host) return;
+  if (!REF || !Array.isArray(REF.library)) {
+    host.innerHTML = '<p style="color:var(--muted);font-size:13px">No library data loaded. Run <code>convert_all.py</code> and upload the generated <code>reference.json</code> next to <code>index.html</code>.</p>';
+    document.getElementById('libraryControls').style.display = 'none';
+    return;
+  }
+  document.getElementById('libraryControls').style.display = '';
+  const all = REF.library;
+  // genre dropdown (keep current selection)
+  const gSel = document.getElementById('libGenre');
+  if (gSel && gSel.options.length <= 1) {
+    [...new Set(all.map(b => b.genre).filter(Boolean))].sort().forEach(g => gSel.add(new Option(g, g)));
+  }
+  const q = (document.getElementById('libSearch').value || '').trim().toLowerCase();
+  const st = document.getElementById('libStatus').value;
+  const ge = gSel ? gSel.value : '';
+  let rows = all.filter(b =>
+    (!st || b.status === st) && (!ge || b.genre === ge) &&
+    (!q || (b.title + ' ' + b.author + ' ' + b.genre).toLowerCase().includes(q)));
+  const k = _libSort.key, dir = _libSort.dir;
+  rows = rows.map((b, i) => ({ b, i })).sort((x, y) => {
+    let c;
+    if (k === 'status') c = (_LIB_STATUS_ORDER[x.b.status.toLowerCase()] ?? 9) - (_LIB_STATUS_ORDER[y.b.status.toLowerCase()] ?? 9);
+    else c = String(x.b[k] || '').localeCompare(String(y.b[k] || ''), undefined, { sensitivity: 'base' });
+    return (c * dir) || (x.i - y.i);
+  }).map(o => o.b);
+  const counts = {};
+  all.forEach(b => counts[b.status] = (counts[b.status] || 0) + 1);
+  document.getElementById('libStats').textContent =
+    `${all.length} books · ` + Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(' · ') +
+    (rows.length !== all.length ? ` — showing ${rows.length}` : '');
+  const arrow = key => _libSort.key === key ? (_libSort.dir > 0 ? ' ▲' : ' ▼') : '';
+  const badge = s => `<span class="lib-badge lib-${_esc(s.toLowerCase().replace(/\s+/g,'-'))}">${_esc(s)}</span>`;
+  host.innerHTML = `<table class="lib-table"><thead><tr>
+      <th data-k="title">Book${arrow('title')}</th><th data-k="author">Author${arrow('author')}</th>
+      <th data-k="genre">Genre${arrow('genre')}</th><th data-k="status">Status${arrow('status')}</th></tr></thead><tbody>` +
+    (rows.length ? rows.map(b => `<tr><td class="lib-title">${_esc(b.title)}</td><td>${_esc(b.author)}</td><td>${_esc(b.genre)}</td><td>${badge(b.status)}</td></tr>`).join('')
+                 : '<tr><td colspan="4" style="color:var(--muted)">No books match.</td></tr>') + '</tbody></table>';
+  host.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
+    const key = th.dataset.k;
+    _libSort = { key, dir: _libSort.key === key ? -_libSort.dir : 1 };
+    renderLibrary();
+  }));
 }
