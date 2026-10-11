@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════
    Serkan Life Tracker V3.1
    - Chart.js charts with tooltips
-   - scorePreview includes Nutrition + Bonus/Malus
+   - scorePreview includes Bonus/Malus (Nutrition no longer scores, build 41)
    - Fixed comparison delta logic (prayer, sleep, trivial)
    - Partial year detection
    - Finance tab (Worth, Income, Allowance Income, Expenses DE, TR Payments)
@@ -446,17 +446,19 @@ function rowToEntry(row, m) {
 }
 
 /* ════════════════════════════════════════════
-   SCORE CALCULATOR  (includes Nutrition + B/M)
+   SCORE CALCULATOR  (matches master Excel; Nutrition removed)
 ════════════════════════════════════════════ */
 function calcNewScore(e) {
+  // Mirrors the master Excel "New Score" column (scoring table updated 10/9/26, build 41).
+  // Nutrition no longer scores; Bonus/Malus does.  Blank water / German / weight score 0.
   const pray = num0(e.prayTotal);
-  const ps = pray>6?1 : pray>=5?0.5 : -0.5;
+  const ps = pray>=6?1 : pray>=4?0.5 : -0.5;
 
   const read = num0(e.reading);
   const rs = read===0?-0.5 : read<10?0 : read<30?0.5 : 1;
 
   const ent = num0(e.tv)+num0(e.movies);
-  const es = ent>10?-0.5 : ent>=9?0 : ent>=6?0.5 : 1;
+  const es = ent<=5?1 : ent<=7?0.5 : ent<=10?0 : -0.5;   // TVS+Mov: <=5 | 6-7 | 8-10 | >10
 
   const teeth = num0(e.teeth);
   const ts = teeth>=3?1 : teeth===2?0.5 : teeth===1?0 : -0.5;
@@ -464,26 +466,25 @@ function calcNewScore(e) {
   const wo = num0(e.workout);
   const ws = wo===0?-0.5 : wo<10?0 : wo<30?0.5 : 1;
 
-  const sl = num0(e.sleep);
-  const ss = sl<6?-0.5 : sl<7?0 : sl<=8?1 : sl<=9?0.5 : -0.5;
+  const sv = parseNum(e.sleep);
+  const ss = sv===null?0 : sv<6?-0.5 : sv<7?0 : sv<=8?1 : sv<=9?0.5 : 0;   // blank = 0 (like Excel); >9h is neutral
 
   const delta = e.deltaKg ?? (e.weightKg!=null&&e.targetKg!=null ? e.weightKg-e.targetKg : null);
   const wt = delta===null?0 : delta<=0?1 : delta<=1?0.5 : delta<=2?0 : delta<=4?-0.5 : -1;
 
-  const water = num0(e.water);
-  const wat = water<1.5?-0.5 : water<3?0.5 : 1;
+  const wv = parseNum(e.water);
+  const wat = wv===null?0 : wv<1.5?-0.5 : wv<3?0.5 : 1;
 
-  const ger = num0(e.german);
-  const gs = ger===0?-0.5 : ger<10?0 : ger<30?0.5 : 1;
+  const gv = parseNum(e.german);
+  const gs = gv===null?0 : gv===0?-0.5 : gv<30?0.5 : 1;
 
-  const ns = parseNum(e.nutrition) ?? 0;
   const bs = parseNum(e.bonusMalus) ?? 0;
 
-  const total = ps+rs+es+ts+ws+ss+wt+wat+gs+ns+bs;
+  const total = ps+rs+es+ts+ws+ss+wt+wat+gs+bs;
   const breakdown = [
     `🤲${fmt(ps,1)}`,`📖${fmt(rs,1)}`,`📺${fmt(es,1)}`,`🦷${fmt(ts,1)}`,
     `💪${fmt(ws,1)}`,`😴${fmt(ss,1)}`,`⚖️${fmt(wt,1)}`,`💧${fmt(wat,1)}`,
-    `🇩🇪${fmt(gs,1)}`,`🥗${fmt(ns,1)}`,`⭐${fmt(bs,1)}`
+    `🇩🇪${fmt(gs,1)}`,`⭐${fmt(bs,1)}`
   ].join('  ');
   return { total, breakdown };
 }

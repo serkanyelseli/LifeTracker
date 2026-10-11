@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=61" />
+  <link rel="stylesheet" href="styles.css?v=62" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V5.0 · build 41</span>
+    <span class="version-badge">V5.0 · build 42</span>
     <span id="liveModeBadge" style="display:none;background:#2e8b57;color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;margin-left:8px;letter-spacing:.04em">⚡ LIVE</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
@@ -109,7 +109,7 @@
           <div class="field-group"><label>Water (L)</label><input type="number" id="water" step="0.1" /></div>
 
           <div class="field-group"><label>German (min)</label><input type="number" id="german" step="1" /></div>
-          <div class="field-group">
+          <div class="field-group" style="display:none"><!-- Nutrition retired 10/9/26: no longer scores; use Bonus / Malus -->
             <label>Nutrition</label>
             <select id="nutrition">
               <option value="">—</option>
@@ -418,16 +418,16 @@
   <section id="guide" class="view">
     <div class="panel">
       <div class="panel-title">Scoring Guide</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Your personal scoring table — how each habit converts to a New Score point. Max possible per day: +11 (all Best). Reference this when logging.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Your personal scoring table — how each habit converts to a New Score point. Max possible per day: +10 (all Best). Table updated 10/9/26 — Nutrition no longer scores. Reference this when logging.</p>
 
       <div class="guide-grid">
 
         <div class="guide-card">
           <div class="guide-header"><span class="guide-icon">🤲</span><span class="guide-name">Prayer total</span><span class="guide-unit">times/day</span></div>
           <div class="guide-rows">
-            <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">&gt; 6</span><span class="guide-score">+1</span></div>
-            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">5 – 6</span><span class="guide-score">+0.5</span></div>
-            <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">&lt; 5</span><span class="guide-score">−0.5</span></div>
+            <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">≥ 6</span><span class="guide-score">+1</span></div>
+            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">4 – 5.5</span><span class="guide-score">+0.5</span></div>
+            <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">&lt; 4</span><span class="guide-score">−0.5</span></div>
           </div>
         </div>
 
@@ -445,8 +445,8 @@
           <div class="guide-header"><span class="guide-icon">📺</span><span class="guide-name">Screen (TV + Movies)</span><span class="guide-unit">pieces/day</span></div>
           <div class="guide-rows">
             <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">&le; 5</span><span class="guide-score">+1</span></div>
-            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">6 – 8</span><span class="guide-score">+0.5</span></div>
-            <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">9 – 10</span><span class="guide-score">0</span></div>
+            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">6 – 7</span><span class="guide-score">+0.5</span></div>
+            <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">8 – 10</span><span class="guide-score">0</span></div>
             <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">&gt; 10</span><span class="guide-score">−0.5</span></div>
           </div>
         </div>
@@ -464,7 +464,7 @@
         <div class="guide-card">
           <div class="guide-header"><span class="guide-icon">💪</span><span class="guide-name">Workout</span><span class="guide-unit">min/day</span></div>
           <div class="guide-rows">
-            <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">&gt; 30</span><span class="guide-score">+1</span></div>
+            <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">≥ 30</span><span class="guide-score">+1</span></div>
             <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">10 – 29</span><span class="guide-score">+0.5</span></div>
             <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">1 – 9</span><span class="guide-score">0</span></div>
             <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">0</span><span class="guide-score">−0.5</span></div>
@@ -476,8 +476,8 @@
           <div class="guide-rows">
             <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">7 – 8h</span><span class="guide-score">+1</span></div>
             <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">8 – 9h</span><span class="guide-score">+0.5</span></div>
-            <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">6 – 7h</span><span class="guide-score">0</span></div>
-            <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">&lt; 6 or &gt; 9</span><span class="guide-score">−0.5</span></div>
+            <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">6 – 7h or &gt; 9h</span><span class="guide-score">0</span></div>
+            <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">&lt; 6h</span><span class="guide-score">−0.5</span></div>
           </div>
         </div>
 
@@ -505,24 +505,13 @@
           <div class="guide-header"><span class="guide-icon">🇩🇪</span><span class="guide-name">German</span><span class="guide-unit">min/day</span></div>
           <div class="guide-rows">
             <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">≥ 30</span><span class="guide-score">+1</span></div>
-            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">10 – 29</span><span class="guide-score">+0.5</span></div>
-            <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">1 – 9</span><span class="guide-score">0</span></div>
+            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">1 – 29</span><span class="guide-score">+0.5</span></div>
             <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">0</span><span class="guide-score">−0.5</span></div>
           </div>
         </div>
 
-        <div class="guide-card">
-          <div class="guide-header"><span class="guide-icon">🥗</span><span class="guide-name">Nutrition</span><span class="guide-unit"></span></div>
-          <div class="guide-rows">
-            <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">Clean &amp; Intentional</span><span class="guide-score">+1</span></div>
-            <div class="guide-row nominal"><span class="guide-label">Nominal</span><span class="guide-range">Mostly Healthy</span><span class="guide-score">+0.5</span></div>
-            <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">Normal</span><span class="guide-score">0</span></div>
-            <div class="guide-row worst"><span class="guide-label">Worst</span><span class="guide-range">Junk</span><span class="guide-score">−0.5</span></div>
-          </div>
-        </div>
-
-        <div class="guide-card">
-          <div class="guide-header"><span class="guide-icon">⭐</span><span class="guide-name">Bonus / Malus</span><span class="guide-unit"></span></div>
+                <div class="guide-card">
+          <div class="guide-header"><span class="guide-icon">⭐</span><span class="guide-name">Bonus / Malus</span><span class="guide-unit">incl. nutrition</span></div>
           <div class="guide-rows">
             <div class="guide-row best"><span class="guide-label">Best</span><span class="guide-range">Exceptional Day</span><span class="guide-score">+1</span></div>
             <div class="guide-row neutral"><span class="guide-label">Neutral</span><span class="guide-range">Normal</span><span class="guide-score">0</span></div>
@@ -1800,6 +1789,6 @@
   <!-- ── SCORING GUIDE ── -->
 
 </main>
-<script src="app.js?v=61"></script>
+<script src="app.js?v=62"></script>
 </body>
 </html>
