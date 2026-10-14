@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Serkan Life Tracker V4</title>
+  <title>Serkan Life Tracker</title>
 
   <!-- Home screen icon (iOS reads apple-touch-icon, not favicon) -->
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="Life Tracker" />
   <meta name="theme-color" content="#0a0f1a" />
 
-  <link rel="stylesheet" href="styles.css?v=62" />
+  <link rel="stylesheet" href="styles.css?v=63" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -26,7 +26,7 @@
 <header class="app-header">
   <div class="header-brand">
     <h1>Serkan Life Tracker</h1>
-    <span class="version-badge">V5.0 · build 42</span>
+    <span class="version-badge">V5.0 · build 43</span>
     <span id="liveModeBadge" style="display:none;background:#2e8b57;color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;margin-left:8px;letter-spacing:.04em">⚡ LIVE</span>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
@@ -146,6 +146,7 @@
             <div class="score-item" style="flex:1">
               <span class="score-label">Breakdown</span>
               <span style="font-size:11px;color:var(--muted);font-family:var(--mono);line-height:1.8" id="scoreBreakdown">—</span>
+              <span style="font-size:12px;line-height:1.8;display:block;margin-top:4px" id="perfectStatus"></span>
             </div>
           </div>
 
@@ -263,7 +264,7 @@
         <label>Metric</label>
         <select id="metricSelect">
           <option value="newScore">New Score</option>
-          <option value="score">Score (old)</option>
+          <option value="score">Classic Score</option>
           <option value="prayTotal">Prayer total</option>
           <option value="tvMovies">Screen (TV + Movies)</option>
           <option value="reading">Reading</option>
@@ -296,6 +297,11 @@
     <div class="panel" id="recordsPanel">
       <div class="panel-title">🏆 All-time records</div>
       <div id="recordsGrid" class="records-grid"></div>
+    </div>
+    <div class="panel" id="perfectPanel">
+      <div class="panel-title">★ Perfect days</div>
+      <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px">A mark only — it never changes the score. ★ = all 9 criteria (from 2026) · ✦ = classic 6 criteria (before 2026).</p>
+      <div id="perfectGrid" class="records-grid"></div>
     </div>
     <div class="panel" id="streaksPanel">
       <div class="panel-title">🔥 Streaks</div>
@@ -380,7 +386,7 @@
 
     <div class="chart-grid">
       <div class="panel"><div class="panel-title">New Score</div><div class="chart-wrap"><canvas id="patNewScore"></canvas></div></div>
-      <div class="panel"><div class="panel-title">Score (old)</div><div class="chart-wrap"><canvas id="patScore"></canvas></div></div>
+      <div class="panel"><div class="panel-title">Classic Score</div><div class="chart-wrap"><canvas id="patScore"></canvas></div></div>
     </div>
     <div class="chart-grid">
       <div class="panel"><div class="panel-title">Prayer total</div><div class="chart-wrap"><canvas id="patPrayer"></canvas></div></div>
@@ -419,6 +425,7 @@
     <div class="panel">
       <div class="panel-title">Scoring Guide</div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Your personal scoring table — how each habit converts to a New Score point. Max possible per day: +10 (all Best). Table updated 10/9/26 — Nutrition no longer scores. Reference this when logging.</p>
+      <p style="font-size:12px;color:var(--muted);margin:-8px 0 20px;line-height:1.7"><b style="color:var(--yellow)">★ Perfect day</b> (from 2026, a mark only — no points): prayers all ≥ 1, reading ≥ 30, teeth ≥ 3, TV+Movies ≤ 5, workout ≥ 30, sleep 7–9 h, water ≥ 3 L, German ≥ 30 min, weight delta &lt; +1 kg. <b style="color:var(--yellow)">✦ Classic perfect</b> (before 2026): the first six only.</p>
 
       <div class="guide-grid">
 
@@ -1789,6 +1796,6 @@
   <!-- ── SCORING GUIDE ── -->
 
 </main>
-<script src="app.js?v=62"></script>
+<script src="app.js?v=63"></script>
 </body>
 </html>

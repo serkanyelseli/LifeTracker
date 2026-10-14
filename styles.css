@@ -294,3 +294,7 @@ tbody tr:hover { background:var(--surface2); }
 .lib-badge.lib-to-read { background:rgba(245,158,11,0.15); color:#f59e0b; }
 .lib-badge.lib-completed { background:rgba(46,139,87,0.18); color:#3fa968; }
 @media (max-width:640px) { .lib-table th:nth-child(3), .lib-table td:nth-child(3) { display:none; } }
+
+/* Perfect-day marks (build 43) */
+.pd-mark { color:#f5c542; margin-left:4px; font-size:0.95em; }
+.cal-day .pd-mark { float:right; margin-left:0; }

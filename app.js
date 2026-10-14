@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   Serkan Life Tracker V3.1
+   Serkan Life Tracker
    - Chart.js charts with tooltips
    - scorePreview includes Bonus/Malus (Nutrition no longer scores, build 41)
    - Fixed comparison delta logic (prayer, sleep, trivial)
@@ -405,7 +405,7 @@ function buildMap(rows) {
     header, dataStart: header+2,
     date:   idxOf(top,['Date']),  day:  idxOf(top,['Day']),
     month:  idxOf(top,['Month']), year: idxOf(top,['Year']),
-    score:  idxOf(top,['Score']), newScore: idxOf(top,['New Score']),
+    score:  idxOf(top,['Classic Score','Score']), newScore: idxOf(top,['New Score']),
     pS:  idxOf(sub,['S']),   pO:  idxOf(sub,['Ö','O']),
     pIk: idxOf(sub,['İk','Ik']), pAk: idxOf(sub,['Ak']),
     pY:  idxOf(sub,['Y']),   pNf: idxOf(sub,['Nf']),  pT: idxOf(sub,['T']),
@@ -554,6 +554,13 @@ function updatePreview() {
   el.textContent = fmt(total,1);
   el.className = 'score-val' + (total>=3?' good' : total>=0?'' : ' bad');
   document.getElementById('scoreBreakdown').textContent = breakdown;
+  const ps = document.getElementById('perfectStatus');
+  if (ps) {
+    const p = perfectDay(e);
+    if (!e.date) ps.textContent = '';
+    else if (p.ok) { ps.textContent = `${PD_MARK[p.era]} ${p.era === 'full' ? 'Perfect day' : 'Classic perfect day'}`; ps.style.color = 'var(--yellow)'; }
+    else { ps.textContent = `${p.met} of ${p.total} · missing: ${p.missing.join(', ')}`; ps.style.color = 'var(--muted)'; }
+  }
 }
 
 function findDaily(date) { return getData().find(x=>x.type==='daily'&&x.date===date); }
@@ -962,6 +969,7 @@ function renderCalGrid() {
   let startDow = firstDay.getDay(); // 0=Sun
   startDow = startDow === 0 ? 6 : startDow - 1; // shift so Mon=0
 
+  const pdSet = perfectDaySet();
   let html = '';
   // Pad with previous month days
   for (let i = 0; i < startDow; i++) {
@@ -976,7 +984,7 @@ function renderCalGrid() {
     const dots = events.map(e => `<span class="cal-dot ${CAL_TYPES[e.type]?.cls||'other'}" title="${_esc(e.name)}"></span>`).join('');
     html += `<div class="cal-day${isToday?' today':''}${events.length?' has-events':''}"
       onclick="calDayClick(${y},${m},${d})" title="${_esc(events.map(e=>CAL_TYPES[e.type]?.icon+' '+e.name).join('\n')||'')}">
-      <div class="cal-day-num">${d}</div>
+      <div class="cal-day-num">${d}${pdSet[_iso(y,m,d)] ? `<span class="pd-mark" title="${pdSet[_iso(y,m,d)]==='full'?'Perfect day':'Classic perfect day'}">${PD_MARK[pdSet[_iso(y,m,d)]]}</span>` : ''}</div>
       <div class="cal-day-dots">${dots}</div>
     </div>`;
   }
@@ -1188,7 +1196,7 @@ const DOW_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 const PATTERN_METRICS = [
   { key:'newScore',  id:'patNewScore', label:'New Score',       decimals:2, color:'#0ea5e9', calcScore:true  },
-  { key:'score',     id:'patScore',    label:'Score (old)',     decimals:2, color:'#a78bfa', calcScore:false },
+  { key:'score',     id:'patScore',    label:'Classic Score',   decimals:2, color:'#a78bfa', calcScore:false },
   { key:'prayTotal', id:'patPrayer',   label:'Prayer',         decimals:2, color:'#f59e0b', calcScore:false },
   { key:'reading',   id:'patReading',  label:'Reading (pages)',decimals:1, color:'#22c55e', calcScore:false },
   { key:'workout',   id:'patWorkout',  label:'Workout (min)',  decimals:1, color:'#14b8a6', calcScore:false },
@@ -1567,7 +1575,7 @@ function renderKpis() {
   const partial = isPartialYear(y);
 
   const METRICS = [
-    ['New Score','newScore'], ['Score (old)','score'], ['Prayer','prayTotal'],
+    ['New Score','newScore'], ['Classic Score','score'], ['Prayer','prayTotal'],
     ['Screen','tvMovies'], ['Reading','reading'],
     ['Sleep h','sleep'], ['Workout min','workout'], ['Weight kg','weightKg'],
     ['Water L','water'], ['German min','german']
@@ -1597,7 +1605,7 @@ function renderKpis() {
 ════════════════════════════════════════════ */
 const RECORD_METRICS = [
   { key:'newScore',  label:'New Score',    icon:'⭐', higher:true,  unit:'',    decimals:1 },
-  { key:'score',     label:'Score (old)',  icon:'🏅', higher:true,  unit:'',    decimals:1 },
+  { key:'score',     label:'Classic Score',  icon:'🏅', higher:true,  unit:'',    decimals:1 },
   { key:'prayTotal', label:'Prayer',       icon:'🤲', higher:true,  unit:'',    decimals:1 },
   { key:'reading',   label:'Reading',      icon:'📖', higher:true,  unit:'p',   decimals:0 },
   { key:'workout',   label:'Workout',      icon:'💪', higher:true,  unit:'min', decimals:0 },
@@ -1771,6 +1779,86 @@ function daysBetween(a, b) {
   return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
 }
 
+
+/* ════════════════════════════════════════════
+   PERFECT DAYS  (build 43) — a mark, never extra points
+   ★ Perfect day   (from 2026-01-01): 9 criteria
+   ✦ Classic perfect (before 2026):   6 criteria (no water/German/weight in those years)
+════════════════════════════════════════════ */
+const PD_FULL_FROM = '2026-01-01';
+function perfectDay(d) {
+  const full = !!d.date && d.date >= PD_FULL_FROM;
+  const n = f => parseNum(d[f]);
+  const delta = d.deltaKg != null && parseNum(d.deltaKg) !== null ? parseNum(d.deltaKg)
+              : (n('weightKg') != null && n('targetKg') != null ? n('weightKg') - n('targetKg') : null);
+  const sleep = n('sleep'), water = n('water'), ger = n('german');
+  const checks = [
+    { label: 'Prayers',  ok: PRAYER_PARTS.every(f => n(f) !== null && n(f) >= 1) },
+    { label: 'Reading',  ok: n('reading') !== null && n('reading') >= 30 },
+    { label: 'Teeth',    ok: n('teeth')   !== null && n('teeth')   >= 3 },
+    { label: 'TV+Movies',ok: ((n('tv') ?? 0) + (n('movies') ?? 0)) <= 5 },
+    { label: 'Workout',  ok: n('workout') !== null && n('workout') >= 30 },
+    { label: 'Sleep',    ok: sleep !== null && sleep >= 7 && sleep <= 9 },
+  ];
+  if (full) checks.push(
+    { label: 'Water',    ok: water !== null && water >= 3 },
+    { label: 'German',   ok: ger !== null && ger >= 30 },
+    { label: 'Weight',   ok: delta !== null && delta < 1 },
+  );
+  const met = checks.filter(c => c.ok).length;
+  return { era: full ? 'full' : 'classic', ok: met === checks.length, met, total: checks.length,
+           missing: checks.filter(c => !c.ok).map(c => c.label) };
+}
+const PD_MARK = { full: '★', classic: '✦' };
+function perfectMark(d) {
+  if (!d || d.type !== 'daily') return '';
+  const p = perfectDay(d);
+  return p.ok ? PD_MARK[p.era] : '';
+}
+function perfectDaySet() {            // date -> era, for every perfect day in the data
+  const m = {};
+  getData().forEach(d => { if (d.type === 'daily' && d.date) { const p = perfectDay(d); if (p.ok) m[d.date] = p.era; } });
+  return m;
+}
+
+function renderPerfectDays() {
+  const el = document.getElementById('perfectGrid');
+  if (!el) return;
+  const daily = getData().filter(d => d.type === 'daily' && d.date);
+  const set = perfectDaySet();
+  const dates = Object.keys(set).sort();
+  const full = dates.filter(x => set[x] === 'full'), classic = dates.filter(x => set[x] === 'classic');
+  const ysel = document.getElementById('yearSelect');
+  const y = ysel ? String(ysel.value) : '';
+  const fmtD = iso => { const [yy, mm, dd] = iso.split('-'); return `${dd} ${MONTHS[Number(mm)-1]}` + (yy !== y ? ` ${yy}` : ''); };
+  const ago = iso => { const n = daysBetween(iso, todayISO()); return n === 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`; };
+  const inYear = list => list.filter(x => x.startsWith(y + '-'));
+
+  const fullStreak = calcStreaks(daily, d => perfectDay(d).ok && perfectDay(d).era === 'full', PD_FULL_FROM);
+  const yFull = inYear(full), yClassic = inYear(classic);
+  const nearFull = daily.filter(d => d.date.startsWith(y + '-') && d.date >= PD_FULL_FROM && !perfectDay(d).ok && perfectDay(d).met === perfectDay(d).total - 1).length;
+
+  const card = (icon, title, big, lines) =>
+    `<div class="record-card"><div class="record-trophy">${icon}</div><div class="record-metric">${title}</div>` +
+    `<div class="record-value">${big}</div>` + lines.map(l => `<div class="record-note" style="margin-top:3px">${l}</div>`).join('') + '</div>';
+
+  const cards = [];
+  cards.push(card('★', 'Perfect days · since 2026', `${full.length} ${full.length === 1 ? 'day' : 'days'}`, [
+    full.length ? `Last: ${fmtD(full[full.length-1])} · ${ago(full[full.length-1])}` : 'None yet — all 9 criteria',
+    yFull.length ? `${y}: ${yFull.length} → ${yFull.slice(-6).map(fmtD).join(' · ')}${yFull.length > 6 ? ' …' : ''}` : (Number(y) >= 2026 ? `${y}: none yet` : '')
+  ].filter(Boolean)));
+  if (Number(y) >= 2026) cards.push(card('☆', `Close calls · ${y}`, `${nearFull} ${nearFull === 1 ? 'day' : 'days'}`, ['Missed exactly one of the 9 criteria']));
+  cards.push(card('🔥', 'Perfect-day streak', `${fullStreak.best} ${fullStreak.best === 1 ? 'day' : 'days'}`, [
+    fullStreak.best > 1 ? `Best: ${fmtD(fullStreak.bestStart)} → ${fmtD(fullStreak.bestEnd)}` : 'Best: consecutive perfect days',
+    `Now: ${fullStreak.current > 0 ? fullStreak.current + ' 🔥' : 'not active'}`
+  ]));
+  cards.push(card('✦', 'Classic perfect · 2007–2025', `${classic.length} ${classic.length === 1 ? 'day' : 'days'}`, [
+    classic.length ? `6 criteria (no water / German / weight back then)` : '',
+    yClassic.length ? `${y}: ${yClassic.map(fmtD).join(' · ')}` : ''
+  ].filter(Boolean)));
+  el.innerHTML = cards.join('');
+}
+
 function renderStreaks() {
   const el = document.getElementById('streaksGrid');
   if (!el) return;
@@ -1833,6 +1921,7 @@ function renderDashboard() {
   renderKpis();
   renderRecords();
   renderStreaks();
+  renderPerfectDays();
   renderNotLoggedNudge();
 
   const metric = document.getElementById('metricSelect').value;
@@ -2430,6 +2519,7 @@ function renderHistory() {
     <tr data-date="${d.date}" data-type="${d.type}">
       ${cols.map(c => {
         if (c==='type') return `<td>${typeTag(d.type)}</td>`;
+        if (c==='date') return `<td>${d.date??''}${perfectMark(d) ? ` <span class="pd-mark" title="Perfect day">${perfectMark(d)}</span>` : ''}</td>`;
         if (c==='newScore') return `<td class="${scoreClass(d[c])}">${fmt(d[c],1)}</td>`;
         if (['sleep','weightKg','water','prayTotal'].includes(c)) return `<td>${d[c]!=null?fmt(d[c],1):''}</td>`;
         return `<td>${d[c]??''}</td>`;
